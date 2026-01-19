@@ -1,0 +1,21 @@
+-- Insert sample providers
+INSERT INTO providers (name, type, api_key, base_url, timeout_ms, is_default, enabled) VALUES
+('siliconflow', 'openai', 'sk-your-siliconflow-key', 'https://api.siliconflow.cn/v1', 60000, TRUE, TRUE),
+('claude-proxy', 'anthropic', 'sk-your-claude-key', 'https://icat.pp.ua', 60000, TRUE, TRUE);
+
+-- Insert sample routing rules
+INSERT INTO routing_rules (rule_type, pattern, provider_name, actual_model, priority, enabled) VALUES
+-- Prefix routing for DeepSeek models
+('prefix', 'deepseek', 'siliconflow', NULL, 10, TRUE),
+-- Prefix routing for Qwen models
+('prefix', 'qwen', 'siliconflow', NULL, 10, TRUE),
+-- Prefix routing for Claude models
+('prefix', 'claude', 'claude-proxy', NULL, 10, TRUE);
+
+-- Optional: Insert sample load balancing group
+-- INSERT INTO load_balance_groups (name, model_pattern, strategy, enabled) VALUES
+-- ('gpt-4o-balancer', 'gpt-4o', 'weighted', TRUE);
+
+-- INSERT INTO load_balance_members (group_id, provider_name, weight, priority) VALUES
+-- (1, 'siliconflow', 2, 0),
+-- (1, 'openrouter', 1, 0);

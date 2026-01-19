@@ -1,0 +1,46 @@
+# AI Gateway Configuration
+
+# Application settings
+app:
+  name: "ai-gateway"
+  env: "development"
+
+# Logging
+log:
+  level: "info"
+  format: "console"
+
+# HTTP Server
+http:
+  addr: ":8081"
+  readTimeout: 30s
+  writeTimeout: 120s
+
+# MySQL Database (REQUIRED)
+# All providers, routing rules, and load balancing configs are stored in database
+mysql:
+  enabled: true  # MUST be true - gateway now requires MySQL
+  host: "localhost"
+  port: 3306
+  user: "root"
+  password: "your_password"
+  database: "ai_gateway"
+  charset: "utf8mb4"
+  maxIdle: 10
+  maxOpen: 100
+
+# Authentication
+auth:
+  enabled: true
+  apiKeys:
+    - "sk-gateway-test-key"
+    - "sk-gateway-production"
+
+# ========================================
+# NOTE: Providers, routing, and load balancing are now managed in MySQL
+# Use the admin API or SQL to configure:
+# - INSERT INTO providers (name, type, api_key, base_url, is_default, enabled)
+# - INSERT INTO routing_rules (rule_type, pattern, provider_name, priority, enabled)
+# - INSERT INTO load_balance_groups (name, model_pattern, strategy, enabled)
+# - INSERT INTO load_balance_members (group_id, provider_name, weight, priority)
+# ========================================
