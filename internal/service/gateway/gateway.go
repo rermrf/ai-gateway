@@ -1,4 +1,4 @@
-// Package gateway provides the core gateway service logic.
+// Package gateway 提供核心网关服务逻辑。
 package gateway
 
 import (
@@ -21,17 +21,17 @@ import (
 	"ai-gateway/internal/repository"
 )
 
-// GatewayService defines the interface for gateway operations.
+// GatewayService 定义了网关操作的接口。
 type GatewayService interface {
 	Chat(ctx context.Context, req *domain.ChatRequest) (*domain.ChatResponse, error)
 	ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, error)
 	ListModels(ctx context.Context) ([]string, error)
 	GetProvider(model string) (providers.Provider, string, error)
-	// Reload reloads configuration from database.
+	// Reload 从数据库重新加载配置。
 	Reload(ctx context.Context) error
 }
 
-// providerNode wraps a Provider to implement loadbalancer.Node interface.
+// providerNode 包装了一个 Provider 以实现 loadbalancer.Node 接口。
 type providerNode struct {
 	provider providers.Provider
 	name     string
@@ -46,11 +46,11 @@ type gatewayService struct {
 	routingRuleRepo repository.RoutingRuleRepository
 	loadBalanceRepo repository.LoadBalanceRepository
 
-	providers     map[string]providers.Provider                       // name -> provider
-	typeDefaults  map[string]string                                   // type -> default provider name
-	routes        map[string]config.ModelRoute                        // exact model routes
-	prefixRoutes  []prefixRouteEntry                                  // sorted by priority
-	loadBalancers map[string]loadbalancer.LoadBalancer[*providerNode] // model pattern -> load balancer
+	providers     map[string]providers.Provider                       // 名称 -> 供应商
+	typeDefaults  map[string]string                                   // 类型 -> 默认供应商名称
+	routes        map[string]config.ModelRoute                        // 精确的模型路由
+	prefixRoutes  []prefixRouteEntry                                  // 按优先级排序
+	loadBalancers map[string]loadbalancer.LoadBalancer[*providerNode] // 模型模式 -> 负载均衡器
 	httpClient    *http.Client
 	logger        *zap.Logger
 }
@@ -63,7 +63,7 @@ type prefixRouteEntry struct {
 
 var _ GatewayService = (*gatewayService)(nil)
 
-// NewGatewayService creates a new gateway service that loads config from database.
+// NewGatewayService 创建一个新的网关服务，从数据库加载配置。
 func NewGatewayService(
 	providerRepo repository.ProviderRepository,
 	routingRuleRepo repository.RoutingRuleRepository,
@@ -82,7 +82,7 @@ func NewGatewayService(
 		logger:          logger.Named("gateway"),
 	}
 
-	// Initial load from database
+	// 初始从数据库加载
 	if err := g.Reload(context.Background()); err != nil {
 		logger.Error("failed to load initial configuration from database", zap.Error(err))
 	}
@@ -90,15 +90,15 @@ func NewGatewayService(
 	return g
 }
 
-// Reload reloads configuration from database.
+// Reload 从数据库重新加载配置。
 func (g *gatewayService) Reload(ctx context.Context) error {
-	// Load providers from database
+	// 从数据库加载供应商
 	dbProviders, err := g.providerRepo.List(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to load providers from database: %w", err)
+		return fmt.Errorf("从数据库加载供应商失败: %w", err)
 	}
 
-	// Initialize providers
+	// 初始化供应商
 	newProviders := make(map[string]providers.Provider)
 	newTypeDefaults := make(map[string]string)
 
@@ -135,7 +135,7 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 			zap.String("baseURL", p.BaseURL),
 		)
 
-		// Track default provider for each type
+		// 跟踪每种类型的默认供应商
 		if p.IsDefault {
 			newTypeDefaults[p.Type] = p.Name
 		} else if newTypeDefaults[p.Type] == "" {
@@ -143,10 +143,10 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		}
 	}
 
-	// Load routing rules from database
+	// 从数据库加载路由规则
 	routingRules, err := g.routingRuleRepo.List(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to load routing rules from database: %w", err)
+		return fmt.Errorf("从数据库加载路由规则失败: %w", err)
 	}
 
 	newRoutes := make(map[string]config.ModelRoute)
@@ -167,7 +167,7 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		}
 	}
 
-	// Sort prefix routes by priority descending, then by length descending
+	// 按优先级降序排序前缀路由，然后按长度降序排序
 	sort.Slice(newPrefixRoutes, func(i, j int) bool {
 		if newPrefixRoutes[i].priority != newPrefixRoutes[j].priority {
 			return newPrefixRoutes[i].priority > newPrefixRoutes[j].priority
@@ -175,10 +175,10 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		return len(newPrefixRoutes[i].prefix) > len(newPrefixRoutes[j].prefix)
 	})
 
-	// Load load balancing groups from database
+	// 从数据库加载负载均衡组
 	lbGroups, err := g.loadBalanceRepo.ListGroups(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to load load balance groups from database: %w", err)
+		return fmt.Errorf("从数据库加载负载均衡组失败: %w", err)
 	}
 
 	newLoadBalancers := make(map[string]loadbalancer.LoadBalancer[*providerNode])
@@ -228,7 +228,7 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		)
 	}
 
-	// Atomic update
+	// 原子更新
 	g.providers = newProviders
 	g.typeDefaults = newTypeDefaults
 	g.routes = newRoutes
@@ -245,10 +245,10 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 	return nil
 }
 
-// GetProvider returns the provider for the given model.
-// Priority: exact match -> load balancing -> prefix match -> type default
+// GetProvider 返回给定模型的供应商。
+// 优先级：精确匹配 -> 负载均衡 -> 前缀匹配 -> 类型默认
 func (g *gatewayService) GetProvider(model string) (providers.Provider, string, error) {
-	// 1. Check exact route
+	// 1. 检查精确路由
 	if route, ok := g.routes[model]; ok {
 		provider, ok := g.providers[route.Provider]
 		if !ok {
@@ -262,7 +262,7 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 		return provider, actualModel, nil
 	}
 
-	// 2. Check load balancing
+	// 2. 检查负载均衡
 	if lb, ok := g.loadBalancers[model]; ok {
 		node, err := lb.Select()
 		if err == nil && node != nil {
@@ -271,7 +271,7 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 		}
 	}
 
-	// 3. Check prefix routing
+	// 3. 检查前缀路由
 	for _, entry := range g.prefixRoutes {
 		if strings.HasPrefix(strings.ToLower(model), strings.ToLower(entry.prefix)) {
 			provider, ok := g.providers[entry.provider]
@@ -286,7 +286,7 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 		}
 	}
 
-	// 4. Fall back to type default
+	// 4. 回退到类型默认值
 	providerType := g.detectProviderType(model)
 	providerName := g.typeDefaults[providerType]
 	if providerName == "" {
@@ -318,7 +318,7 @@ func (g *gatewayService) detectProviderType(model string) string {
 	}
 }
 
-// Chat handles a non-streaming chat request.
+// Chat 处理非流式聊天请求。
 func (g *gatewayService) Chat(ctx context.Context, req *domain.ChatRequest) (*domain.ChatResponse, error) {
 	provider, actualModel, err := g.GetProvider(req.Model)
 	if err != nil {
@@ -336,7 +336,7 @@ func (g *gatewayService) Chat(ctx context.Context, req *domain.ChatRequest) (*do
 	return provider.Chat(ctx, req)
 }
 
-// ChatStream handles a streaming chat request.
+// ChatStream 处理流式聊天请求。
 func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, error) {
 	provider, actualModel, err := g.GetProvider(req.Model)
 	if err != nil {
@@ -353,7 +353,7 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 	return provider.ChatStream(ctx, req)
 }
 
-// ListModels returns all available models from all providers.
+// ListModels 返回所有供应商提供的所有可用模型。
 func (g *gatewayService) ListModels(ctx context.Context) ([]string, error) {
 	var allModels []string
 	for name, provider := range g.providers {

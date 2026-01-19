@@ -1,4 +1,4 @@
-// Package ioc provides dependency injection initialization.
+// Package ioc 提供依赖注入初始化。
 package ioc
 
 import (
@@ -12,30 +12,27 @@ import (
 	"ai-gateway/internal/service/gateway"
 )
 
-// InitGinServer initializes the Gin HTTP server with all dependencies.
+// InitGinServer 初始化带有所有依赖项的 Gin HTTP 服务器。
 func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
-	// Initialize database (required now)
+	// 初始化数据库
 	db, err := InitDB(cfg, logger)
 	if err != nil {
 		logger.Fatal("failed to initialize database", zap.Error(err))
 	}
-	if db == nil {
-		logger.Fatal("MySQL must be enabled - please configure mysql.enabled=true in config.yaml")
-	}
 
-	// Initialize DAOs
+	// 初始化 DAOs
 	providerDAO := dao.NewGormProviderDAO(db)
 	routingRuleDAO := dao.NewGormRoutingRuleDAO(db)
 	apiKeyDAO := dao.NewGormAPIKeyDAO(db)
 	loadBalanceDAO := dao.NewGormLoadBalanceDAO(db)
 
-	// Initialize repositories
+	// 初始化仓库 (Repositories)
 	providerRepo := repository.NewProviderRepository(providerDAO)
 	routingRuleRepo := repository.NewRoutingRuleRepository(routingRuleDAO)
 	apiKeyRepo := repository.NewAPIKeyRepository(apiKeyDAO)
 	loadBalanceRepo := repository.NewLoadBalanceRepository(loadBalanceDAO)
 
-	// Initialize gateway service with repositories
+	// 使用仓库初始化网关服务
 	gw := gateway.NewGatewayService(
 		providerRepo,
 		routingRuleRepo,
@@ -43,13 +40,13 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 		logger,
 	)
 
-	// Initialize handlers
+	// 初始化处理器
 	openaiHandler := handler.NewOpenAIHandler(gw, logger)
 	anthropicHandler := handler.NewAnthropicHandler(gw, logger)
 
-	// TODO: Initialize admin handler when implemented
+	// TODO: 在实现后初始化管理处理器
 	_ = apiKeyRepo
 
-	// Create and return server with auth config
+	// 创建并返回带有身份验证配置的服务器
 	return httpapi.NewServer(openaiHandler, anthropicHandler, nil, cfg.Auth, logger)
 }

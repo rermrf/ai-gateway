@@ -45,9 +45,6 @@ func provideDB(cfg *config.Config, logger *zap.Logger) *gorm.DB {
 	if err != nil {
 		logger.Fatal("failed to initialize database", zap.Error(err))
 	}
-	if db == nil {
-		logger.Fatal("MySQL must be enabled")
-	}
 	return db
 }
 

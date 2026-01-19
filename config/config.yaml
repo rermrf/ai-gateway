@@ -1,25 +1,24 @@
-# AI Gateway Configuration
+# AI 网关配置
 
-# Application settings
+# 应用程序设置
 app:
   name: "ai-gateway"
   env: "development"
 
-# Logging
+# 日志
 log:
   level: "info"
   format: "console"
 
-# HTTP Server
+# HTTP 服务器
 http:
   addr: ":8081"
   readTimeout: 30s
   writeTimeout: 120s
 
-# MySQL Database (REQUIRED)
-# All providers, routing rules, and load balancing configs are stored in database
+# MySQL 数据库（必填）
+# 所有供应商、路由规则和负载均衡配置都存储在数据库中
 mysql:
-  enabled: true  # MUST be true - gateway now requires MySQL
   host: "localhost"
   port: 3306
   user: "root"
@@ -29,7 +28,7 @@ mysql:
   maxIdle: 10
   maxOpen: 100
 
-# Authentication
+# 身份验证
 auth:
   enabled: true
   apiKeys:
@@ -37,8 +36,8 @@ auth:
     - "sk-gateway-production"
 
 # ========================================
-# NOTE: Providers, routing, and load balancing are now managed in MySQL
-# Use the admin API or SQL to configure:
+# 注意：供应商、路由和负载均衡现在在 MySQL 中管理
+# 使用 Admin API 或 SQL 进行配置：
 # - INSERT INTO providers (name, type, api_key, base_url, is_default, enabled)
 # - INSERT INTO routing_rules (rule_type, pattern, provider_name, priority, enabled)
 # - INSERT INTO load_balance_groups (name, model_pattern, strategy, enabled)

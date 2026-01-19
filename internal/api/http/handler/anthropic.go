@@ -1,4 +1,4 @@
-// Package handler provides HTTP handlers for the AI Gateway.
+// Package handler 为 AI 网关提供 HTTP 处理器。
 package handler
 
 import (
@@ -14,14 +14,14 @@ import (
 	gatewaysvc "ai-gateway/internal/service/gateway"
 )
 
-// AnthropicHandler handles Anthropic-compatible API requests.
+// AnthropicHandler 处理 Anthropic 兼容的 API 请求。
 type AnthropicHandler struct {
 	gw        gatewaysvc.GatewayService
 	converter *converter.AnthropicConverter
 	logger    *zap.Logger
 }
 
-// NewAnthropicHandler creates a new Anthropic handler.
+// NewAnthropicHandler 创建一个新的 Anthropic 处理器。
 func NewAnthropicHandler(gw gatewaysvc.GatewayService, logger *zap.Logger) *AnthropicHandler {
 	return &AnthropicHandler{
 		gw:        gw,
@@ -30,7 +30,7 @@ func NewAnthropicHandler(gw gatewaysvc.GatewayService, logger *zap.Logger) *Anth
 	}
 }
 
-// Messages handles POST /v1/messages
+// Messages 处理 POST /v1/messages
 func (h *AnthropicHandler) Messages(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -39,7 +39,7 @@ func (h *AnthropicHandler) Messages(c *gin.Context) {
 			"type": "error",
 			"error": gin.H{
 				"type":    "invalid_request_error",
-				"message": "Failed to read request body",
+				"message": "无法读取请求体",
 			},
 		})
 		return
@@ -86,7 +86,7 @@ func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatReque
 			"type": "error",
 			"error": gin.H{
 				"type":    "api_error",
-				"message": "Failed to encode response",
+				"message": "无法编码响应",
 			},
 		})
 		return
@@ -114,7 +114,7 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
 
-	// Send message_start event
+	// 发送 message_start 事件
 	messageID := converter.GenerateID()
 	startEvent := fmt.Sprintf(`{"type":"message_start","message":{"id":"%s","type":"message","role":"assistant","content":[],"model":"%s","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}}}`, messageID, req.Model)
 	fmt.Fprintf(c.Writer, "event: message_start\ndata: %s\n\n", startEvent)
@@ -132,7 +132,7 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 			switch delta.Type {
 			case "content":
 				if contentIndex == 0 {
-					// Send content_block_start
+					// 发送 content_block_start
 					startBlock := fmt.Sprintf(`{"type":"content_block_start","index":%d,"content_block":{"type":"text","text":""}}`, contentIndex)
 					fmt.Fprintf(w, "event: content_block_start\ndata: %s\n\n", startBlock)
 				}
@@ -148,7 +148,7 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 
 			case "tool_use":
 				contentIndex++
-				// Send tool_use content_block_start
+				// 发送 tool_use content_block_start
 				if delta.Content != nil {
 					startBlock := fmt.Sprintf(`{"type":"content_block_start","index":%d,"content_block":{"type":"tool_use","id":"%s","name":"%s","input":{}}}`,
 						contentIndex, delta.Content.ToolID, delta.Content.ToolName)
@@ -159,15 +159,15 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 				}
 
 			case "done":
-				// Send content_block_stop
+				// 发送 content_block_stop
 				stopBlock := fmt.Sprintf(`{"type":"content_block_stop","index":%d}`, contentIndex)
 				fmt.Fprintf(w, "event: content_block_stop\ndata: %s\n\n", stopBlock)
 
-				// Send message_delta
+				// 发送 message_delta
 				chunk, _ := h.converter.EncodeStreamDelta(&delta)
 				fmt.Fprintf(w, "event: message_delta\ndata: %s\n\n", chunk)
 
-				// Send message_stop
+				// 发送 message_stop
 				fmt.Fprintf(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
 
 				if f, ok := w.(http.Flusher); ok {

@@ -1,4 +1,4 @@
-// Package converter handles protocol conversion between different API formats.
+// Package converter 处理不同 API 格式之间的协议转换。
 package converter
 
 import (
@@ -9,10 +9,10 @@ import (
 	"ai-gateway/internal/domain"
 )
 
-// AnthropicConverter converts between Anthropic API format and unified format.
+// AnthropicConverter 在 Anthropic API 格式和统一格式之间进行转换。
 type AnthropicConverter struct{}
 
-// NewAnthropicConverter creates a new Anthropic converter.
+// NewAnthropicConverter 创建一个新的 Anthropic 转换器。
 func NewAnthropicConverter() *AnthropicConverter {
 	return &AnthropicConverter{}
 }
@@ -52,7 +52,7 @@ func (f *flexibleSystem) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return fmt.Errorf("system field must be a string or array of content blocks")
+	return fmt.Errorf("system 字段必须是字符串或内容块数组")
 }
 
 // flexibleContent 支持 string、单个对象或 content block 数组等多种格式
@@ -89,7 +89,7 @@ func (f *flexibleContent) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return fmt.Errorf("content field must be a string, object, or array of content blocks, got: %s", string(data))
+	return fmt.Errorf("content 字段必须是字符串、对象或内容块数组，得到: %s", string(data))
 }
 
 // claudeToolChoice 支持多种 tool_choice 格式
@@ -105,7 +105,7 @@ type claudeThinking struct {
 	BudgetTokens int    `json:"budget_tokens,omitempty"` // 思考 token 预算
 }
 
-// Anthropic request types
+// Anthropic 请求类型
 type anthropicRequest struct {
 	Model         string            `json:"model"`
 	Messages      []claudeMessage   `json:"messages"`
@@ -186,7 +186,7 @@ type contentBlock struct {
 	Name      string                     `json:"name,omitempty"`
 	Input     map[string]any             `json:"input,omitempty"`
 	ToolUseID string                     `json:"tool_use_id,omitempty"`
-	Content   *flexibleToolResultContent `json:"content,omitempty"` // for tool_result，支持字符串或数组
+	Content   *flexibleToolResultContent `json:"content,omitempty"` // 用于 tool_result，支持字符串或数组
 	IsError   bool                       `json:"is_error,omitempty"`
 	Thinking  string                     `json:"thinking,omitempty"`
 }
@@ -204,7 +204,7 @@ type claudeTool struct {
 	InputSchema map[string]any `json:"input_schema"`
 }
 
-// Anthropic response types
+// Anthropic 响应类型
 type anthropicResponse struct {
 	ID           string         `json:"id"`
 	Type         string         `json:"type"`
@@ -221,7 +221,7 @@ type claudeUsage struct {
 	OutputTokens int `json:"output_tokens"`
 }
 
-// Streaming event types
+// 流式事件类型
 type streamEvent struct {
 	Type         string             `json:"type"`
 	Message      *anthropicResponse `json:"message,omitempty"`
@@ -239,7 +239,7 @@ type streamDelta struct {
 	StopReason  string `json:"stop_reason,omitempty"`
 }
 
-// DecodeRequest converts an Anthropic API request to the unified format.
+// DecodeRequest 将 Anthropic API 请求转换为统一格式。
 func (c *AnthropicConverter) DecodeRequest(data []byte) (*domain.ChatRequest, error) {
 	var req anthropicRequest
 	if err := json.Unmarshal(data, &req); err != nil {
@@ -276,12 +276,12 @@ func (c *AnthropicConverter) DecodeRequest(data []byte) (*domain.ChatRequest, er
 		}
 	}
 
-	// Convert messages
+	// 转换消息
 	for _, m := range req.Messages {
 		unified.Messages = append(unified.Messages, c.decodeMessage(m))
 	}
 
-	// Convert tools
+	// 转换工具
 	for _, t := range req.Tools {
 		unified.Tools = append(unified.Tools, domain.ToolDefinition{
 			Name:        t.Name,
@@ -376,7 +376,7 @@ func (c *AnthropicConverter) decodeToolChoice(tc *claudeToolChoice) *domain.Tool
 	return choice
 }
 
-// EncodeResponse converts a unified response to Anthropic API format.
+// EncodeResponse 将统一响应转换为 Anthropic API 格式。
 func (c *AnthropicConverter) EncodeResponse(resp *domain.ChatResponse) ([]byte, error) {
 	claudeResp := anthropicResponse{
 		ID:         resp.ID,
@@ -431,7 +431,7 @@ func (c *AnthropicConverter) mapFinishReason(reason domain.FinishReason) string 
 	}
 }
 
-// EncodeStreamDelta converts a stream delta to Anthropic SSE format.
+// EncodeStreamDelta 将流式增量转换为 Anthropic SSE 格式。
 func (c *AnthropicConverter) EncodeStreamDelta(delta *domain.StreamDelta) ([]byte, error) {
 	var event streamEvent
 
@@ -486,7 +486,7 @@ func (c *AnthropicConverter) EncodeStreamDelta(delta *domain.StreamDelta) ([]byt
 	return json.Marshal(event)
 }
 
-// GenerateID generates a unique message ID.
+// GenerateID 生成唯一的消息 ID。
 func GenerateID() string {
 	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
 }

@@ -1,4 +1,4 @@
-// Package converter handles protocol conversion between different API formats.
+// Package converter 处理不同 API 格式之间的协议转换。
 package converter
 
 import (
@@ -9,10 +9,10 @@ import (
 	"ai-gateway/internal/domain"
 )
 
-// OpenAIConverter converts between OpenAI API format and unified format.
+// OpenAIConverter 在 OpenAI API 格式和统一格式之间进行转换。
 type OpenAIConverter struct{}
 
-// NewOpenAIConverter creates a new OpenAI converter.
+// NewOpenAIConverter 创建一个新的 OpenAI 转换器。
 func NewOpenAIConverter() *OpenAIConverter {
 	return &OpenAIConverter{}
 }
@@ -69,7 +69,7 @@ type oaiJSONSchemaSpec struct {
 	Strict      bool           `json:"strict,omitempty"`
 }
 
-// OpenAI request types
+// OpenAI 请求类型
 type openAIRequest struct {
 	Model             string             `json:"model"`
 	Messages          []oaiMessage       `json:"messages"`
@@ -88,7 +88,7 @@ type openAIRequest struct {
 
 type oaiMessage struct {
 	Role             string        `json:"role"`
-	Content          interface{}   `json:"content"`                     // string or []contentPart
+	Content          interface{}   `json:"content"`                     // 字符串或 []contentPart
 	ReasoningContent string        `json:"reasoning_content,omitempty"` // 思考内容
 	Name             string        `json:"name,omitempty"`
 	ToolCalls        []oaiToolCall `json:"tool_calls,omitempty"`
@@ -128,7 +128,7 @@ type oaiFunctionCall struct {
 	Arguments string `json:"arguments"`
 }
 
-// OpenAI response types
+// OpenAI 响应类型
 type openAIResponse struct {
 	ID      string      `json:"id"`
 	Object  string      `json:"object"`
@@ -150,7 +150,7 @@ type oaiUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// Streaming types
+// 流式传输类型
 type openAIStreamChunk struct {
 	ID      string            `json:"id"`
 	Object  string            `json:"object"`
@@ -166,7 +166,7 @@ type oaiStreamChoice struct {
 	FinishReason string     `json:"finish_reason,omitempty"`
 }
 
-// DecodeRequest converts an OpenAI API request to the unified format.
+// DecodeRequest 将 OpenAI API 请求转换为统一格式。
 func (c *OpenAIConverter) DecodeRequest(data []byte) (*domain.ChatRequest, error) {
 	var req openAIRequest
 	if err := json.Unmarshal(data, &req); err != nil {
@@ -184,17 +184,17 @@ func (c *OpenAIConverter) DecodeRequest(data []byte) (*domain.ChatRequest, error
 		FrequencyPenalty: req.FrequencyPenalty,
 	}
 
-	// Convert messages
+	// 转换消息
 	for _, m := range req.Messages {
 		msg := c.decodeMessage(m)
-		// Extract system message
+		// 提取系统消息
 		if msg.Role == domain.RoleSystem {
 			unified.System = msg.GetTextContent()
 		}
 		unified.Messages = append(unified.Messages, msg)
 	}
 
-	// Convert tools
+	// 转换工具
 	for _, t := range req.Tools {
 		unified.Tools = append(unified.Tools, domain.ToolDefinition{
 			Name:        t.Function.Name,
@@ -222,7 +222,7 @@ func (c *OpenAIConverter) decodeMessage(m oaiMessage) domain.Message {
 		Name: m.Name,
 	}
 
-	// Handle tool results
+	// 处理工具结果
 	if m.ToolCallID != "" {
 		msg.Role = domain.RoleTool
 		if text, ok := m.Content.(string); ok {
@@ -235,7 +235,7 @@ func (c *OpenAIConverter) decodeMessage(m oaiMessage) domain.Message {
 		return msg
 	}
 
-	// Handle content
+	// 处理内容
 	switch content := m.Content.(type) {
 	case string:
 		msg.Content = append(msg.Content, domain.ContentPart{
@@ -250,7 +250,7 @@ func (c *OpenAIConverter) decodeMessage(m oaiMessage) domain.Message {
 		}
 	}
 
-	// Handle tool calls
+	// 处理工具调用
 	for _, tc := range m.ToolCalls {
 		var input map[string]any
 		json.Unmarshal([]byte(tc.Function.Arguments), &input)
@@ -351,7 +351,7 @@ func (c *OpenAIConverter) decodeResponseFormat(rf *oaiResponseFormat) *domain.Re
 	return format
 }
 
-// EncodeResponse converts a unified response to OpenAI API format.
+// EncodeResponse 将统一响应转换为 OpenAI API 格式。
 func (c *OpenAIConverter) EncodeResponse(resp *domain.ChatResponse) ([]byte, error) {
 	oaiResp := openAIResponse{
 		ID:      resp.ID,
@@ -366,7 +366,7 @@ func (c *OpenAIConverter) EncodeResponse(resp *domain.ChatResponse) ([]byte, err
 		},
 	}
 
-	// Build message content
+	// 构建消息内容
 	var textContent string
 	var toolCalls []oaiToolCall
 	for _, part := range resp.Content {
@@ -403,7 +403,7 @@ func (c *OpenAIConverter) EncodeResponse(resp *domain.ChatResponse) ([]byte, err
 	return json.Marshal(oaiResp)
 }
 
-// EncodeStreamDelta converts a stream delta to OpenAI SSE format.
+// EncodeStreamDelta 将流式增量转换为 OpenAI SSE 格式。
 func (c *OpenAIConverter) EncodeStreamDelta(delta *domain.StreamDelta) ([]byte, error) {
 	chunk := openAIStreamChunk{
 		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),

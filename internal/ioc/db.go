@@ -1,4 +1,4 @@
-// Package ioc provides database initialization.
+// Package ioc 提供数据库初始化。
 package ioc
 
 import (
@@ -15,14 +15,9 @@ import (
 	"ai-gateway/internal/repository/dao"
 )
 
-// InitDB initializes GORM database connection from config.
+// InitDB 根据配置初始化 GORM 数据库连接。
 func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
-	if !cfg.MySQL.Enabled {
-		zapLogger.Info("MySQL is disabled, skipping database initialization")
-		return nil, nil
-	}
-
-	// Build DSN from config
+	// 从配置构建 DSN
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
 		cfg.MySQL.User,
 		cfg.MySQL.Password,
@@ -32,7 +27,7 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 		cfg.MySQL.Charset,
 	)
 
-	// Configure GORM logger
+	// 配置 GORM 日志记录器
 	logLevel := logger.Silent
 	if cfg.Log.Level == "debug" {
 		logLevel = logger.Info
@@ -42,21 +37,21 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 		Logger: logger.Default.LogMode(logLevel),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect database: %w", err)
+		return nil, fmt.Errorf("无法连接数据库: %w", err)
 	}
 
-	// Get underlying SQL DB to configure connection pool
+	// 获取底层 SQL DB 以配置连接池
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
+		return nil, fmt.Errorf("无法获取 sql.DB: %w", err)
 	}
 
-	// Set connection pool settings
+	// 设置连接池设置
 	sqlDB.SetMaxIdleConns(cfg.MySQL.MaxIdle)
 	sqlDB.SetMaxOpenConns(cfg.MySQL.MaxOpen)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	// Auto migrate tables
+	// 自动迁移表
 	if err := db.AutoMigrate(
 		&dao.Provider{},
 		&dao.RoutingRule{},
@@ -64,7 +59,7 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 		&dao.LoadBalanceGroup{},
 		&dao.LoadBalanceMember{},
 	); err != nil {
-		return nil, fmt.Errorf("failed to migrate database: %w", err)
+		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
 
 	zapLogger.Info("database initialized",
@@ -77,9 +72,9 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 	return db, nil
 }
 
-// maskDSN masks the password in DSN for logging.
+// maskDSN 屏蔽 DSN 中的密码以进行日志记录。
 func maskDSN(dsn string) string {
-	// Find password part between first : and @
+	// 在第一个 : 和 @ 之间找到密码部分
 	parts := strings.SplitN(dsn, ":", 2)
 	if len(parts) < 2 {
 		return dsn
