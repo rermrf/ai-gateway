@@ -3,19 +3,25 @@ package dao
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-// APIKey 是网关 API 密钥的数据库模型。
+// APIKey 是网关 API 密钥的数据库模型（多租户）。
 type APIKey struct {
-	ID        int64      `gorm:"primaryKey;autoIncrement"`
-	Key       string     `gorm:"uniqueIndex;size:128;not null"`
-	Name      string     `gorm:"size:64;not null"`
-	Enabled   bool       `gorm:"default:true;index"`
-	CreatedAt time.Time  `gorm:"autoCreateTime"`
-	ExpiresAt *time.Time `gorm:"default:null"`
+	ID            int64           `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID      int64           `gorm:"index;not null" json:"tenantId"`
+	UserID        *int64          `gorm:"index" json:"userId,omitempty"` // NULL 表示租户级共享 Key
+	Key           string          `gorm:"uniqueIndex;size:128;not null" json:"key"`
+	Name          string          `gorm:"size:64;not null" json:"name"`
+	AllowedModels json.RawMessage `gorm:"type:json" json:"allowedModels,omitempty"`
+	RateLimitRPM  int             `gorm:"default:60" json:"rateLimitRpm"`
+	Enabled       bool            `gorm:"default:true;index" json:"enabled"`
+	ExpiresAt     *time.Time      `gorm:"default:null" json:"expiresAt,omitempty"`
+	LastUsedAt    *time.Time      `gorm:"default:null" json:"lastUsedAt,omitempty"`
+	CreatedAt     time.Time       `gorm:"autoCreateTime" json:"createdAt"`
 }
 
 // TableName 返回 APIKey 的表名。
@@ -28,8 +34,11 @@ type APIKeyDAO interface {
 	Create(ctx context.Context, key *APIKey) error
 	Update(ctx context.Context, key *APIKey) error
 	Delete(ctx context.Context, id int64) error
+	GetByID(ctx context.Context, id int64) (*APIKey, error)
 	GetByKey(ctx context.Context, key string) (*APIKey, error)
 	List(ctx context.Context) ([]APIKey, error)
+	ListByTenantID(ctx context.Context, tenantID int64) ([]APIKey, error)
+	ListByUserID(ctx context.Context, userID int64) ([]APIKey, error)
 }
 
 // GormAPIKeyDAO 是 APIKeyDAO 的 GORM 实现。
@@ -66,6 +75,27 @@ func (d *GormAPIKeyDAO) GetByKey(ctx context.Context, key string) (*APIKey, erro
 func (d *GormAPIKeyDAO) List(ctx context.Context) ([]APIKey, error) {
 	var keys []APIKey
 	err := d.db.WithContext(ctx).Find(&keys).Error
+	return keys, err
+}
+
+func (d *GormAPIKeyDAO) GetByID(ctx context.Context, id int64) (*APIKey, error) {
+	var k APIKey
+	err := d.db.WithContext(ctx).First(&k, id).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &k, err
+}
+
+func (d *GormAPIKeyDAO) ListByTenantID(ctx context.Context, tenantID int64) ([]APIKey, error) {
+	var keys []APIKey
+	err := d.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Find(&keys).Error
+	return keys, err
+}
+
+func (d *GormAPIKeyDAO) ListByUserID(ctx context.Context, userID int64) ([]APIKey, error) {
+	var keys []APIKey
+	err := d.db.WithContext(ctx).Where("user_id = ?", userID).Find(&keys).Error
 	return keys, err
 }
 

@@ -103,13 +103,21 @@ func registerRoutes(
 		adminGroup.POST("/api-keys", adminHandler.CreateAPIKey)
 		adminGroup.DELETE("/api-keys/:id", adminHandler.DeleteAPIKey)
 
+		// 用户管理
+		adminGroup.GET("/users", adminHandler.ListUsers)
+		adminGroup.POST("/users", adminHandler.CreateUser)
+		adminGroup.GET("/users/:id", adminHandler.GetUser)
+		adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
+		adminGroup.DELETE("/users/:id", adminHandler.DeleteUser)
+		adminGroup.GET("/users/:id/api-keys", adminHandler.GetUserAPIKeys)
+
 		// 仪表盘统计
 		adminGroup.GET("/dashboard/stats", adminHandler.DashboardStats)
 	}
 
 	// 静态文件服务（生产模式下托管前端）
 	engine.Static("/admin", "./web/admin/dist")
-	
+
 	// SPA fallback: 非 API 路径的 404 返回 index.html
 	engine.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path

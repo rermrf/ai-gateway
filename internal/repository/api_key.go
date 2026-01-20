@@ -13,8 +13,11 @@ type APIKeyRepository interface {
 	Create(ctx context.Context, key *dao.APIKey) error
 	Update(ctx context.Context, key *dao.APIKey) error
 	Delete(ctx context.Context, id int64) error
+	GetByID(ctx context.Context, id int64) (*dao.APIKey, error)
 	GetByKey(ctx context.Context, key string) (*dao.APIKey, error)
 	List(ctx context.Context) ([]dao.APIKey, error)
+	ListByTenantID(ctx context.Context, tenantID int64) ([]dao.APIKey, error)
+	ListByUserID(ctx context.Context, userID int64) ([]dao.APIKey, error)
 	Validate(ctx context.Context, key string) (bool, error)
 }
 
@@ -40,12 +43,24 @@ func (r *apiKeyRepository) Delete(ctx context.Context, id int64) error {
 	return r.dao.Delete(ctx, id)
 }
 
+func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*dao.APIKey, error) {
+	return r.dao.GetByID(ctx, id)
+}
+
 func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*dao.APIKey, error) {
 	return r.dao.GetByKey(ctx, key)
 }
 
 func (r *apiKeyRepository) List(ctx context.Context) ([]dao.APIKey, error) {
 	return r.dao.List(ctx)
+}
+
+func (r *apiKeyRepository) ListByTenantID(ctx context.Context, tenantID int64) ([]dao.APIKey, error) {
+	return r.dao.ListByTenantID(ctx, tenantID)
+}
+
+func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64) ([]dao.APIKey, error) {
+	return r.dao.ListByUserID(ctx, userID)
 }
 
 func (r *apiKeyRepository) Validate(ctx context.Context, key string) (bool, error) {
