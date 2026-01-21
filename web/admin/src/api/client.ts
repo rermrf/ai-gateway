@@ -1,33 +1,33 @@
 import axios from 'axios'
 
-// 开发环境默认凭据
-const DEFAULT_CREDENTIALS = btoa('admin:admin')
-
 const apiClient = axios.create({
-    baseURL: '/api/admin',
+    baseURL: '/api', // Base URL changed to /api to cover /auth, /user, and /admin
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json',
     },
 })
 
-// 添加请求拦截器（用于 Basic Auth）
+// Request interceptor
 apiClient.interceptors.request.use((config) => {
-    // 从 localStorage 获取凭据，如果没有则使用默认凭据
-    const credentials = localStorage.getItem('adminCredentials') || DEFAULT_CREDENTIALS
-    config.headers.Authorization = `Basic ${credentials}`
+    const token = localStorage.getItem('token')
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+    }
     return config
 })
 
-// 响应拦截器
+// Response interceptor
 apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            // 清除凭据并重定向到登录
-            localStorage.removeItem('adminCredentials')
-            // 开发环境暂不跳转
-            console.error('Unauthorized - please check credentials')
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
+            // Redirect to login if not already there
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+                window.location.href = '/login'
+            }
         }
         return Promise.reject(error)
     }

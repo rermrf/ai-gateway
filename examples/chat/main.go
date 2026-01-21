@@ -116,7 +116,7 @@ func chatStream(messages []Message) (string, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer sk-gateway-test-key")
+	req.Header.Set("Authorization", "Bearer sk-ad0b8f5b588778a1ce89769ef28ccdc65e8b976b778bad2ada88d1f9bec053c7")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

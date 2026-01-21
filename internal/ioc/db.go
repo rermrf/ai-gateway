@@ -58,6 +58,8 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 		&dao.APIKey{},
 		&dao.LoadBalanceGroup{},
 		&dao.LoadBalanceMember{},
+		&dao.User{},
+		&dao.UsageLog{},
 	); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}

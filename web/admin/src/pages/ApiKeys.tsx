@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiKeyApi } from '@/api'
+import { apiKeyApi, adminApiKeyApi } from '@/api' // Import adminApiKeyApi
 import type { CreateAPIKeyRequest } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Plus, Trash2, Check, X, Copy } from 'lucide-react'
 
-export function ApiKeys() {
+interface ApiKeysProps {
+    mode?: 'user' | 'admin'
+}
+
+export function ApiKeys({ mode = 'user' }: ApiKeysProps) {
+    const isAdmin = mode === 'admin'
     const queryClient = useQueryClient()
     const [showForm, setShowForm] = useState(false)
     const [newKey, setNewKey] = useState<string | null>(null)
@@ -16,23 +21,23 @@ export function ApiKeys() {
     })
 
     const { data: keys, isLoading } = useQuery({
-        queryKey: ['api-keys'],
-        queryFn: apiKeyApi.list,
+        queryKey: ['api-keys', mode],
+        queryFn: isAdmin ? adminApiKeyApi.list : apiKeyApi.list,
     })
 
     const createMutation = useMutation({
         mutationFn: apiKeyApi.create,
         onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+            queryClient.invalidateQueries({ queryKey: ['api-keys', mode] })
             setNewKey(data.key)
             setFormData({ name: '' })
         },
     })
 
     const deleteMutation = useMutation({
-        mutationFn: apiKeyApi.delete,
+        mutationFn: isAdmin ? adminApiKeyApi.delete : apiKeyApi.delete,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+            queryClient.invalidateQueries({ queryKey: ['api-keys', mode] })
         },
     })
 
@@ -48,15 +53,17 @@ export function ApiKeys() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">API 密钥管理</h2>
-                <Button onClick={() => { setShowForm(true); setNewKey(null) }} disabled={showForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    创建密钥
-                </Button>
+                <h2 className="text-2xl font-bold">{isAdmin ? '系统密钥管理' : 'API 密钥管理'}</h2>
+                {!isAdmin && (
+                    <Button onClick={() => { setShowForm(true); setNewKey(null) }} disabled={showForm}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        创建密钥
+                    </Button>
+                )}
             </div>
 
-            {/* 新创建的密钥显示 */}
-            {newKey && (
+            {/* 新创建的密钥显示 (User Only) */}
+            {newKey && !isAdmin && (
                 <Card className="border-green-200 bg-green-50">
                     <CardHeader>
                         <CardTitle className="text-green-700">密钥创建成功</CardTitle>
@@ -82,7 +89,7 @@ export function ApiKeys() {
                 </Card>
             )}
 
-            {showForm && !newKey && (
+            {showForm && !newKey && !isAdmin && (
                 <Card>
                     <CardHeader>
                         <CardTitle>创建 API 密钥</CardTitle>
@@ -136,29 +143,33 @@ export function ApiKeys() {
                                 </thead>
                                 <tbody>
                                     {keys.map((key) => (
-                                        <tr key={key.ID} className="border-b last:border-0">
-                                            <td className="py-3 font-medium">{key.Name}</td>
+                                        <tr key={key.id} className="border-b last:border-0">
+                                            <td className="py-3 font-medium">{key.name}</td>
                                             <td className="py-3 font-mono text-sm text-muted-foreground">
-                                                {key.Key}
+                                                {key.key}
                                             </td>
                                             <td className="py-3">
                                                 <span
-                                                    className={`rounded-full px-2 py-1 text-xs ${key.Enabled
-                                                            ? 'bg-green-100 text-green-700'
-                                                            : 'bg-red-100 text-red-700'
+                                                    className={`rounded-full px-2 py-1 text-xs ${key.enabled
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : 'bg-red-100 text-red-700'
                                                         }`}
                                                 >
-                                                    {key.Enabled ? '有效' : '已禁用'}
+                                                    {key.enabled ? '有效' : '已禁用'}
                                                 </span>
                                             </td>
                                             <td className="py-3 text-sm text-muted-foreground">
-                                                {new Date(key.CreatedAt).toLocaleString()}
+                                                {new Date(key.createdAt).toLocaleString()}
                                             </td>
                                             <td className="py-3">
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    onClick={() => deleteMutation.mutate(key.ID)}
+                                                    onClick={() => {
+                                                        if (confirm('确定要删除此密钥吗？')) {
+                                                            deleteMutation.mutate(key.id)
+                                                        }
+                                                    }}
                                                     disabled={deleteMutation.isPending}
                                                 >
                                                     <Trash2 className="h-4 w-4 text-destructive" />

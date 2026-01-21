@@ -12,6 +12,8 @@ import (
 	"ai-gateway/config"
 	"ai-gateway/internal/api/http/handler"
 	"ai-gateway/internal/api/http/middleware"
+	"ai-gateway/internal/service/apikey"
+	"ai-gateway/internal/service/auth"
 )
 
 // Server 是 AI 网关的 HTTP 服务器。
@@ -26,6 +28,10 @@ func NewServer(
 	openaiHandler *handler.OpenAIHandler,
 	anthropicHandler *handler.AnthropicHandler,
 	adminHandler *handler.AdminHandler,
+	authHandler *handler.AuthHandler,
+	userHandler *handler.UserHandler,
+	authService *auth.AuthService,
+	apiKeyService apikey.Service,
 	authCfg config.AuthConfig,
 	logger *zap.Logger,
 ) *Server {
@@ -42,7 +48,7 @@ func NewServer(
 	)
 
 	// 注册路由
-	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authCfg)
+	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, authService, apiKeyService, authCfg, logger)
 
 	return &Server{
 		engine: engine,
@@ -55,7 +61,12 @@ func registerRoutes(
 	openaiHandler *handler.OpenAIHandler,
 	anthropicHandler *handler.AnthropicHandler,
 	adminHandler *handler.AdminHandler,
+	authHandler *handler.AuthHandler,
+	userHandler *handler.UserHandler,
+	authService *auth.AuthService,
+	apiKeyService apikey.Service,
 	authCfg config.AuthConfig,
+	logger *zap.Logger,
 ) {
 	// 健康检查（不需要身份验证）
 	engine.GET("/health", func(c *gin.Context) {
@@ -65,9 +76,35 @@ func registerRoutes(
 		})
 	})
 
-	// OpenAI 兼容 API
+	// 认证 API（公开）
+	authGroup := engine.Group("/api/auth")
+	{
+		authGroup.POST("/register", authHandler.Register)
+		authGroup.POST("/login", authHandler.Login)
+	}
+
+	// 用户自助 API（需要 JWT 认证）
+	userGroup := engine.Group("/api/user")
+	userGroup.Use(middleware.JWTAuth(authService))
+	{
+		// 个人信息
+		userGroup.GET("/profile", userHandler.GetProfile)
+		userGroup.PUT("/profile", userHandler.UpdateProfile)
+		userGroup.PUT("/password", userHandler.ChangePassword)
+
+		// API Key 管理
+		userGroup.GET("/api-keys", userHandler.ListMyAPIKeys)
+		userGroup.POST("/api-keys", userHandler.CreateMyAPIKey)
+		userGroup.DELETE("/api-keys/:id", userHandler.DeleteMyAPIKey)
+
+		// 使用统计
+		userGroup.GET("/usage", userHandler.GetMyUsage)
+		userGroup.GET("/usage/daily", userHandler.GetMyDailyUsage)
+	}
+
+	// OpenAI 兼容 API（使用数据库 API Key 认证）
 	v1 := engine.Group("/v1")
-	v1.Use(middleware.Auth(authCfg))
+	v1.Use(middleware.APIKeyAuth(apiKeyService, logger))
 	{
 		v1.POST("/chat/completions", openaiHandler.ChatCompletions)
 		v1.GET("/models", openaiHandler.ListModels)
@@ -76,9 +113,10 @@ func registerRoutes(
 	// Anthropic 兼容 API（为简单起见使用相同的 /v1 前缀）
 	v1.POST("/messages", anthropicHandler.Messages)
 
-	// Admin API 路由组
+	// Admin API 路由组（需要 JWT + 管理员权限）
 	adminGroup := engine.Group("/api/admin")
-	adminGroup.Use(middleware.AdminAuth())
+	adminGroup.Use(middleware.JWTAuth(authService))
+	adminGroup.Use(middleware.RequireAdmin())
 	{
 		// Provider 管理
 		adminGroup.GET("/providers", adminHandler.ListProviders)
@@ -98,18 +136,15 @@ func registerRoutes(
 		adminGroup.POST("/load-balance-groups", adminHandler.CreateLoadBalanceGroup)
 		adminGroup.DELETE("/load-balance-groups/:id", adminHandler.DeleteLoadBalanceGroup)
 
-		// API Key 管理
+		// API Key 管理（全局）
 		adminGroup.GET("/api-keys", adminHandler.ListAPIKeys)
-		adminGroup.POST("/api-keys", adminHandler.CreateAPIKey)
 		adminGroup.DELETE("/api-keys/:id", adminHandler.DeleteAPIKey)
 
 		// 用户管理
 		adminGroup.GET("/users", adminHandler.ListUsers)
-		adminGroup.POST("/users", adminHandler.CreateUser)
 		adminGroup.GET("/users/:id", adminHandler.GetUser)
 		adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
 		adminGroup.DELETE("/users/:id", adminHandler.DeleteUser)
-		adminGroup.GET("/users/:id/api-keys", adminHandler.GetUserAPIKeys)
 
 		// 仪表盘统计
 		adminGroup.GET("/dashboard/stats", adminHandler.DashboardStats)

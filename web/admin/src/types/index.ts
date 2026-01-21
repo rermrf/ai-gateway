@@ -64,12 +64,12 @@ export interface CreateLoadBalanceGroupRequest {
 
 // API Key 类型定义
 export interface APIKey {
-    ID: number
-    Key: string
-    Name: string
-    Enabled: boolean
-    CreatedAt: string
-    ExpiresAt?: string
+    id: number
+    key: string
+    name: string
+    enabled: boolean
+    createdAt: string
+    expiresAt?: string
 }
 
 export interface CreateAPIKeyRequest {
@@ -90,4 +90,54 @@ export interface ApiResponse<T> {
     data: T
     message?: string
     error?: string
+}
+
+// ========== Auth & User Types ==========
+
+export interface User {
+    id: number
+    username: string
+    email: string
+    role: 'user' | 'admin'
+    status: 'active' | 'disabled'
+    createdAt: number
+}
+
+export interface LoginResponse {
+    token: string
+    userId: number
+    username: string
+    role: string
+}
+
+export interface LoginRequest {
+    username: string
+    password: string
+}
+
+export interface RegisterRequest {
+    username: string
+    email: string
+    password: string
+}
+
+export interface UpdateProfileRequest {
+    email: string
+}
+
+export interface ChangePasswordRequest {
+    oldPassword: string
+    newPassword: string
+}
+
+export interface UsageStats {
+    totalRequests: number
+    totalTokens: number
+    cost: number
+}
+
+export interface DailyUsage {
+    date: string
+    requests: number
+    tokens: number
 }

@@ -19,10 +19,10 @@ http:
 # MySQL 数据库（必填）
 # 所有供应商、路由规则和负载均衡配置都存储在数据库中
 mysql:
-  host: "localhost"
+  host: "rermrf.icu"
   port: 3306
   user: "root"
-  password: "your_password"
+  password: "wen123..."
   database: "ai_gateway"
   charset: "utf8mb4"
   maxIdle: 10

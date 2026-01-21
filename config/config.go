@@ -97,8 +97,9 @@ type LoadBalanceMember struct {
 
 // AuthConfig 包含身份验证设置。
 type AuthConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	APIKeys []string `yaml:"apiKeys"`
+	Enabled   bool     `yaml:"enabled"`
+	APIKeys   []string `yaml:"apiKeys"`
+	JWTSecret string   `yaml:"jwtSecret"`
 }
 
 // Load 从 YAML 文件读取配置。

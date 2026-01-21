@@ -8,8 +8,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"ai-gateway/internal/domain"
 	"ai-gateway/internal/repository"
 	"ai-gateway/internal/repository/dao"
+	"ai-gateway/internal/service/apikey"
+	"ai-gateway/internal/service/user"
 )
 
 // AdminHandler 处理管理后台 API 请求。
@@ -17,9 +20,9 @@ type AdminHandler struct {
 	providerRepo    repository.ProviderRepository
 	routingRuleRepo repository.RoutingRuleRepository
 	loadBalanceRepo repository.LoadBalanceRepository
-	apiKeyRepo      repository.APIKeyRepository
-	userRepo        repository.UserRepository
-	tenantRepo      repository.TenantRepository
+	apiKeySvc       apikey.Service
+	userSvc         user.Service
+	usageLogRepo    repository.UsageLogRepository
 	logger          *zap.Logger
 }
 
@@ -28,19 +31,19 @@ func NewAdminHandler(
 	providerRepo repository.ProviderRepository,
 	routingRuleRepo repository.RoutingRuleRepository,
 	loadBalanceRepo repository.LoadBalanceRepository,
-	apiKeyRepo repository.APIKeyRepository,
-	userRepo repository.UserRepository,
-	tenantRepo repository.TenantRepository,
+	apiKeySvc apikey.Service,
+	userSvc user.Service,
+	usageLogRepo repository.UsageLogRepository,
 	logger *zap.Logger,
 ) *AdminHandler {
 	return &AdminHandler{
 		providerRepo:    providerRepo,
 		routingRuleRepo: routingRuleRepo,
 		loadBalanceRepo: loadBalanceRepo,
-		apiKeyRepo:      apiKeyRepo,
-		userRepo:        userRepo,
-		tenantRepo:      tenantRepo,
-		logger:          logger.Named("admin.handler"),
+		apiKeySvc:       apiKeySvc,
+		userSvc:         userSvc,
+		usageLogRepo:    usageLogRepo,
+		logger:          logger.Named("handler.admin"),
 	}
 }
 
@@ -81,7 +84,7 @@ func (h *AdminHandler) GetProvider(c *gin.Context) {
 // CreateProviderRequest 创建提供商的请求体。
 type CreateProviderRequest struct {
 	Name      string `json:"name" binding:"required"`
-	Type      string `json:"type" binding:"required"`
+	Type      string `json:"type" binding:"required"` // openai, anthropic
 	APIKey    string `json:"apiKey" binding:"required"`
 	BaseURL   string `json:"baseURL" binding:"required"`
 	TimeoutMs int    `json:"timeoutMs"`
@@ -123,22 +126,30 @@ func (h *AdminHandler) UpdateProvider(c *gin.Context) {
 		return
 	}
 
+	provider, err := h.providerRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		h.logger.Error("failed to get provider", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get provider"})
+		return
+	}
+	if provider == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+		return
+	}
+
 	var req CreateProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	provider := &dao.Provider{
-		ID:        id,
-		Name:      req.Name,
-		Type:      req.Type,
-		APIKey:    req.APIKey,
-		BaseURL:   req.BaseURL,
-		TimeoutMs: req.TimeoutMs,
-		IsDefault: req.IsDefault,
-		Enabled:   req.Enabled,
-	}
+	provider.Name = req.Name
+	provider.Type = req.Type
+	provider.APIKey = req.APIKey
+	provider.BaseURL = req.BaseURL
+	provider.TimeoutMs = req.TimeoutMs
+	provider.IsDefault = req.IsDefault
+	provider.Enabled = req.Enabled
 
 	if err := h.providerRepo.Update(c.Request.Context(), provider); err != nil {
 		h.logger.Error("failed to update provider", zap.Error(err))
@@ -179,7 +190,7 @@ func (h *AdminHandler) ListRoutingRules(c *gin.Context) {
 
 // CreateRoutingRuleRequest 创建路由规则的请求体。
 type CreateRoutingRuleRequest struct {
-	RuleType     string `json:"ruleType" binding:"required"`
+	RuleType     string `json:"ruleType" binding:"required"` // exact, prefix, wildcard
 	Pattern      string `json:"pattern" binding:"required"`
 	ProviderName string `json:"providerName" binding:"required"`
 	ActualModel  string `json:"actualModel"`
@@ -260,311 +271,7 @@ func (h *AdminHandler) DeleteRoutingRule(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// --- API Key 管理 API ---
-
-// ListAPIKeys 获取所有 API 密钥。
-func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
-	keys, err := h.apiKeyRepo.List(c.Request.Context())
-	if err != nil {
-		h.logger.Error("failed to list api keys", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list api keys"})
-		return
-	}
-	// 脱敏显示
-	for i := range keys {
-		if len(keys[i].Key) > 8 {
-			keys[i].Key = keys[i].Key[:4] + "****" + keys[i].Key[len(keys[i].Key)-4:]
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"data": keys})
-}
-
-// CreateAPIKeyRequest 创建 API 密钥的请求体。
-type CreateAPIKeyRequest struct {
-	TenantID  int64  `json:"tenantId" binding:"required"`
-	Name      string `json:"name" binding:"required"`
-	UserID    *int64 `json:"userId"`    // 关联用户 (NULL 表示租户级共享 Key)
-	ExpiresAt string `json:"expiresAt"` // ISO 8601 格式
-}
-
-// CreateAPIKey 创建新的 API 密钥。
-func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
-	var req CreateAPIKeyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 验证租户是否存在
-	tenant, err := h.tenantRepo.GetByID(c.Request.Context(), req.TenantID)
-	if err != nil {
-		h.logger.Error("failed to get tenant", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate tenant"})
-		return
-	}
-	if tenant == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant not found"})
-		return
-	}
-
-	// 如果指定了用户，验证用户存在
-	if req.UserID != nil {
-		user, err := h.userRepo.GetByID(c.Request.Context(), *req.UserID)
-		if err != nil {
-			h.logger.Error("failed to get user", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate user"})
-			return
-		}
-		if user == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user not found"})
-			return
-		}
-	}
-
-	// 生成随机密钥
-	key := generateAPIKey()
-
-	apiKey := &dao.APIKey{
-		TenantID: req.TenantID,
-		UserID:   req.UserID,
-		Key:      key,
-		Name:     req.Name,
-		Enabled:  true,
-	}
-
-	if err := h.apiKeyRepo.Create(c.Request.Context(), apiKey); err != nil {
-		h.logger.Error("failed to create api key", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create api key"})
-		return
-	}
-
-	// 返回完整密钥（仅此一次）
-	c.JSON(http.StatusCreated, gin.H{
-		"data": apiKey,
-		"key":  key, // 仅在创建时显示完整密钥
-	})
-}
-
-// DeleteAPIKey 删除 API 密钥。
-func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-
-	if err := h.apiKeyRepo.Delete(c.Request.Context(), id); err != nil {
-		h.logger.Error("failed to delete api key", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete api key"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
-}
-
-// --- 用户管理 API ---
-
-// ListUsers 获取所有用户列表。
-func (h *AdminHandler) ListUsers(c *gin.Context) {
-	users, err := h.userRepo.List(c.Request.Context())
-	if err != nil {
-		h.logger.Error("failed to list users", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
-		return
-	}
-	// 脱敏：不返回密码哈希
-	for i := range users {
-		users[i].PasswordHash = ""
-	}
-	c.JSON(http.StatusOK, gin.H{"data": users})
-}
-
-// GetUser 获取单个用户详情。
-func (h *AdminHandler) GetUser(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-
-	user, err := h.userRepo.GetByID(c.Request.Context(), id)
-	if err != nil {
-		h.logger.Error("failed to get user", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-	user.PasswordHash = "" // 脱敏
-	c.JSON(http.StatusOK, gin.H{"data": user})
-}
-
-// CreateUserRequest 创建用户的请求体。
-type CreateUserRequest struct {
-	TenantID int64  `json:"tenantId" binding:"required"`
-	Username string `json:"username" binding:"required"`
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password"`
-	Role     string `json:"role"` // owner, admin, member
-}
-
-// CreateUser 创建新用户。
-func (h *AdminHandler) CreateUser(c *gin.Context) {
-	var req CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 检查用户名是否已存在
-	existing, _ := h.userRepo.GetByTenantAndUsername(c.Request.Context(), req.TenantID, req.Username)
-	if existing != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "username already exists in this tenant"})
-		return
-	}
-
-	role := dao.UserRole(req.Role)
-	if role == "" {
-		role = dao.UserRoleMember
-	}
-
-	user := &dao.User{
-		TenantID: req.TenantID,
-		Username: req.Username,
-		Email:    req.Email,
-		Role:     role,
-		Status:   dao.UserStatusActive,
-	}
-
-	// 简单密码处理（生产环境应使用 bcrypt）
-	if req.Password != "" {
-		user.PasswordHash = req.Password // TODO: 使用 bcrypt 加密
-	}
-
-	if err := h.userRepo.Create(c.Request.Context(), user); err != nil {
-		h.logger.Error("failed to create user", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
-		return
-	}
-	c.JSON(http.StatusCreated, gin.H{"data": user})
-}
-
-// UpdateUserRequest 更新用户的请求体。
-type UpdateUserRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`   // owner, admin, member
-	Status   string `json:"status"` // active, disabled
-}
-
-// UpdateUser 更新用户信息。
-func (h *AdminHandler) UpdateUser(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-
-	// 获取现有用户
-	user, err := h.userRepo.GetByID(c.Request.Context(), id)
-	if err != nil {
-		h.logger.Error("failed to get user", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	var req UpdateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 更新字段
-	if req.Username != "" {
-		user.Username = req.Username
-	}
-	if req.Email != "" {
-		user.Email = req.Email
-	}
-	if req.Role != "" {
-		user.Role = dao.UserRole(req.Role)
-	}
-	if req.Status != "" {
-		user.Status = dao.UserStatus(req.Status)
-	}
-
-	if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
-		h.logger.Error("failed to update user", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"data": user})
-}
-
-// DeleteUser 删除用户。
-func (h *AdminHandler) DeleteUser(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-
-	// 禁止删除系统用户
-	if id == 1 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete system user"})
-		return
-	}
-
-	if err := h.userRepo.Delete(c.Request.Context(), id); err != nil {
-		h.logger.Error("failed to delete user", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
-}
-
-// GetUserAPIKeys 获取用户的所有 API 密钥。
-func (h *AdminHandler) GetUserAPIKeys(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-
-	// 验证用户存在
-	user, err := h.userRepo.GetByID(c.Request.Context(), id)
-	if err != nil {
-		h.logger.Error("failed to get user", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	keys, err := h.apiKeyRepo.ListByUserID(c.Request.Context(), id)
-	if err != nil {
-		h.logger.Error("failed to list user api keys", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list user api keys"})
-		return
-	}
-
-	// 脱敏显示
-	for i := range keys {
-		if len(keys[i].Key) > 8 {
-			keys[i].Key = keys[i].Key[:4] + "****" + keys[i].Key[len(keys[i].Key)-4:]
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"data": keys})
-}
-
-// --- 负载均衡管理 API ---
+// --- 负载均衡组管理 API ---
 
 // ListLoadBalanceGroups 获取所有负载均衡组。
 func (h *AdminHandler) ListLoadBalanceGroups(c *gin.Context) {
@@ -581,7 +288,7 @@ func (h *AdminHandler) ListLoadBalanceGroups(c *gin.Context) {
 type CreateLoadBalanceGroupRequest struct {
 	Name         string `json:"name" binding:"required"`
 	ModelPattern string `json:"modelPattern" binding:"required"`
-	Strategy     string `json:"strategy" binding:"required"`
+	Strategy     string `json:"strategy" binding:"required"` // round-robin, random, failover, weighted
 	Enabled      bool   `json:"enabled"`
 }
 
@@ -624,36 +331,157 @@ func (h *AdminHandler) DeleteLoadBalanceGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// --- 仪表盘 API ---
+// --- API Key 管理 API ---
+
+// ListAPIKeys 获取所有 API 密钥。
+func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
+	keys, err := h.apiKeySvc.List(c.Request.Context())
+	if err != nil {
+		h.logger.Error("failed to list api keys", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list api keys"})
+		return
+	}
+
+	// Service 已经脱敏，不需要再次脱敏
+	c.JSON(http.StatusOK, gin.H{"data": keys})
+}
+
+// DeleteAPIKey 删除 API 密钥。
+func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.apiKeySvc.DeleteByID(c.Request.Context(), id); err != nil {
+		h.logger.Error("failed to delete api key", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete api key"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// --- 用户管理 API ---
+
+// ListUsers 获取所有用户。
+func (h *AdminHandler) ListUsers(c *gin.Context) {
+	users, err := h.userSvc.List(c.Request.Context())
+	if err != nil {
+		h.logger.Error("failed to list users", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
+		return
+	}
+
+	responses := make([]map[string]interface{}, len(users))
+	for i, u := range users {
+		responses[i] = h.toUserResponse(&u)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": responses})
+}
+
+// GetUser 获取单个用户详情。
+func (h *AdminHandler) GetUser(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	u, err := h.userSvc.GetByID(c.Request.Context(), id)
+	if err != nil {
+		h.logger.Error("failed to get user", zap.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.toUserResponse(u)})
+}
+
+// UpdateUserRequest 更新用户的请求体。
+type UpdateUserRequest struct {
+	Email  string `json:"email"`
+	Role   string `json:"role"`   // user, admin
+	Status string `json:"status"` // active, disabled
+}
+
+// UpdateUser 更新用户信息。
+func (h *AdminHandler) UpdateUser(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var req UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	u, err := h.userSvc.UpdateUser(c.Request.Context(), id, domain.UserRole(req.Role), domain.UserStatus(req.Status))
+	if err != nil {
+		h.logger.Error("failed to update user", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.toUserResponse(u)})
+}
+
+// DeleteUser 删除用户。
+func (h *AdminHandler) DeleteUser(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	// 禁止删除管理员用户（ID 1）
+	if id == 1 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete admin user"})
+		return
+	}
+
+	if err := h.userSvc.Delete(c.Request.Context(), id); err != nil {
+		h.logger.Error("failed to delete user", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// --- 仪表盘统计 API ---
 
 // DashboardStats 获取仪表盘统计数据。
 func (h *AdminHandler) DashboardStats(c *gin.Context) {
-	ctx := c.Request.Context()
+	// 获取用户数量
+	users, _ := h.userSvc.List(c.Request.Context())
+	userCount := len(users)
 
-	// 获取各项统计数据
-	providers, _ := h.providerRepo.List(ctx)
-	rules, _ := h.routingRuleRepo.List(ctx)
-	groups, _ := h.loadBalanceRepo.ListGroups(ctx)
-	keys, _ := h.apiKeyRepo.List(ctx)
+	// 获取 API Key 数量
+	keys, _ := h.apiKeySvc.List(c.Request.Context())
+	keyCount := len(keys)
+
+	// 获取全局使用统计
+	stats, _ := h.usageLogRepo.GetGlobalStats(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"providerCount":    len(providers),
-			"routingRuleCount": len(rules),
-			"loadBalanceCount": len(groups),
-			"apiKeyCount":      len(keys),
+			"userCount":   userCount,
+			"apiKeyCount": keyCount,
+			"usage":       stats,
 		},
 	})
 }
 
-// --- 辅助函数 ---
-
-func generateAPIKey() string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	const keyLen = 32
-	key := make([]byte, keyLen)
-	for i := range key {
-		key[i] = charset[i%len(charset)]
+// toUserResponse 将 domain.User 转换为响应格式。
+func (h *AdminHandler) toUserResponse(u *domain.User) map[string]interface{} {
+	return map[string]interface{}{
+		"id":        u.ID,
+		"username":  u.Username,
+		"email":     u.Email,
+		"role":      u.Role.String(),
+		"status":    u.Status.String(),
+		"createdAt": u.CreatedAt.UnixMilli(),
+		"updatedAt": u.UpdatedAt.UnixMilli(),
 	}
-	return "gw-" + string(key)
 }
