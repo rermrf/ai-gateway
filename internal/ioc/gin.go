@@ -14,6 +14,7 @@ import (
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/auth"
 	"ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/usage"
 	"ai-gateway/internal/service/user"
 )
 
@@ -54,6 +55,9 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	// 初始化用户服务
 	userSvc := user.NewService(userRepo, usageLogRepo, logger)
 
+	// 初始化使用统计服务
+	usageSvc := usage.NewService(usageLogRepo, logger)
+
 	// 使用仓库初始化网关服务
 	gw := gateway.NewGatewayService(
 		providerRepo,
@@ -63,8 +67,8 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	)
 
 	// 初始化处理器
-	openaiHandler := handler.NewOpenAIHandler(gw, logger)
-	anthropicHandler := handler.NewAnthropicHandler(gw, logger)
+	openaiHandler := handler.NewOpenAIHandler(gw, usageSvc, logger)
+	anthropicHandler := handler.NewAnthropicHandler(gw, usageSvc, logger)
 	authHandler := handler.NewAuthHandler(userSvc, authService, logger)
 	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, logger)
 	adminHandler := handler.NewAdminHandler(
@@ -73,7 +77,8 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 		loadBalanceRepo,
 		apiKeySvc,
 		userSvc,
-		usageLogRepo,
+		usageSvc,
+		gw,
 		logger,
 	)
 

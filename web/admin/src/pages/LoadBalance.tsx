@@ -48,29 +48,29 @@ export function LoadBalance() {
                                 </thead>
                                 <tbody>
                                     {groups.map((group) => (
-                                        <tr key={group.ID} className="border-b last:border-0">
-                                            <td className="py-3 font-medium">{group.Name}</td>
-                                            <td className="py-3 font-mono text-sm">{group.ModelPattern}</td>
+                                        <tr key={group.id} className="border-b last:border-0">
+                                            <td className="py-3 font-medium">{group.name}</td>
+                                            <td className="py-3 font-mono text-sm">{group.modelPattern}</td>
                                             <td className="py-3">
                                                 <span className="rounded-full bg-secondary px-2 py-1 text-xs">
-                                                    {group.Strategy}
+                                                    {group.strategy}
                                                 </span>
                                             </td>
                                             <td className="py-3">
                                                 <span
-                                                    className={`rounded-full px-2 py-1 text-xs ${group.Enabled
-                                                            ? 'bg-green-100 text-green-700'
-                                                            : 'bg-red-100 text-red-700'
+                                                    className={`rounded-full px-2 py-1 text-xs ${group.enabled
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : 'bg-red-100 text-red-700'
                                                         }`}
                                                 >
-                                                    {group.Enabled ? '启用' : '禁用'}
+                                                    {group.enabled ? '启用' : '禁用'}
                                                 </span>
                                             </td>
                                             <td className="py-3">
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    onClick={() => deleteMutation.mutate(group.ID)}
+                                                    onClick={() => deleteMutation.mutate(group.id)}
                                                     disabled={deleteMutation.isPending}
                                                 >
                                                     <Trash2 className="h-4 w-4 text-destructive" />

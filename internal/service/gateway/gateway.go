@@ -24,7 +24,7 @@ import (
 // GatewayService 定义了网关操作的接口。
 type GatewayService interface {
 	Chat(ctx context.Context, req *domain.ChatRequest) (*domain.ChatResponse, error)
-	ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, error)
+	ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, string, error)
 	ListModels(ctx context.Context) ([]string, error)
 	GetProvider(model string) (providers.Provider, string, error)
 	// Reload 从数据库重新加载配置。
@@ -333,14 +333,19 @@ func (g *gatewayService) Chat(ctx context.Context, req *domain.ChatRequest) (*do
 		zap.Bool("stream", req.Stream),
 	)
 
-	return provider.Chat(ctx, req)
+	resp, err := provider.Chat(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	resp.Provider = provider.Name()
+	return resp, nil
 }
 
 // ChatStream 处理流式聊天请求。
-func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, error) {
+func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, string, error) {
 	provider, actualModel, err := g.GetProvider(req.Model)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	req.Model = actualModel
@@ -350,7 +355,11 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 		zap.String("provider", provider.Name()),
 	)
 
-	return provider.ChatStream(ctx, req)
+	ch, err := provider.ChatStream(ctx, req)
+	if err != nil {
+		return nil, "", err
+	}
+	return ch, provider.Name(), nil
 }
 
 // ListModels 返回所有供应商提供的所有可用模型。

@@ -2,9 +2,11 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -12,19 +14,22 @@ import (
 	"ai-gateway/internal/converter"
 	"ai-gateway/internal/domain"
 	gatewaysvc "ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/usage"
 )
 
 // AnthropicHandler 处理 Anthropic 兼容的 API 请求。
 type AnthropicHandler struct {
 	gw        gatewaysvc.GatewayService
+	usageSvc  usage.Service
 	converter *converter.AnthropicConverter
 	logger    *zap.Logger
 }
 
 // NewAnthropicHandler 创建一个新的 Anthropic 处理器。
-func NewAnthropicHandler(gw gatewaysvc.GatewayService, logger *zap.Logger) *AnthropicHandler {
+func NewAnthropicHandler(gw gatewaysvc.GatewayService, usageSvc usage.Service, logger *zap.Logger) *AnthropicHandler {
 	return &AnthropicHandler{
 		gw:        gw,
+		usageSvc:  usageSvc,
 		converter: converter.NewAnthropicConverter(),
 		logger:    logger.Named("handler.anthropic"),
 	}
@@ -32,6 +37,7 @@ func NewAnthropicHandler(gw gatewaysvc.GatewayService, logger *zap.Logger) *Anth
 
 // Messages 处理 POST /v1/messages
 func (h *AnthropicHandler) Messages(c *gin.Context) {
+	start := time.Now()
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		h.logger.Error("failed to read request body", zap.Error(err))
@@ -59,13 +65,13 @@ func (h *AnthropicHandler) Messages(c *gin.Context) {
 	}
 
 	if req.Stream {
-		h.handleStream(c, req)
+		h.handleStream(c, req, start)
 	} else {
-		h.handleNonStream(c, req)
+		h.handleNonStream(c, req, start)
 	}
 }
 
-func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest) {
+func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
 	resp, err := h.gw.Chat(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("chat request failed", zap.Error(err))
@@ -79,6 +85,11 @@ func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatReque
 		return
 	}
 
+	// 记录使用情况
+	latency := int(time.Since(start).Milliseconds())
+	h.logUsage(c, req.Model, resp.Provider, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens, http.StatusOK, latency)
+
+	// Encode Response
 	respBody, err := h.converter.EncodeResponse(resp)
 	if err != nil {
 		h.logger.Error("failed to encode response", zap.Error(err))
@@ -95,8 +106,8 @@ func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatReque
 	c.Data(http.StatusOK, "application/json", respBody)
 }
 
-func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest) {
-	deltaCh, err := h.gw.ChatStream(c.Request.Context(), req)
+func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
+	deltaCh, _, err := h.gw.ChatStream(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("stream request failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -114,6 +125,9 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
 
+	// 跟踪使用情况
+	var inputTokens, outputTokens int
+
 	// 发送 message_start 事件
 	messageID := converter.GenerateID()
 	startEvent := fmt.Sprintf(`{"type":"message_start","message":{"id":"%s","type":"message","role":"assistant","content":[],"model":"%s","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}}}`, messageID, req.Model)
@@ -126,7 +140,24 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 		select {
 		case delta, ok := <-deltaCh:
 			if !ok {
+				// 流结束，记录使用情况
+				// 对于 Anthropic，流结束可能不包含完整 usage，除非在 message_delta 中捕获
+				latency := int(time.Since(start).Milliseconds())
+				h.logUsage(c, req.Model, "anthropic", inputTokens, outputTokens, inputTokens+outputTokens, http.StatusOK, latency)
 				return false
+			}
+
+			// 更新 Output Tokens
+			if delta.Content != nil {
+				if delta.Content.Text != "" || delta.Content.Thinking != "" {
+					outputTokens++
+				}
+			}
+
+			// 如果 Delta 有 Usage 字段 (需要更新 Domain StreamDelta)
+			if delta.Usage != nil {
+				inputTokens = delta.Usage.PromptTokens
+				outputTokens = delta.Usage.CompletionTokens
 			}
 
 			switch delta.Type {
@@ -182,7 +213,46 @@ func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest)
 			return true
 
 		case <-c.Request.Context().Done():
+			// 客户端断开连接，记录部分使用情况
+			latency := int(time.Since(start).Milliseconds())
+			h.logUsage(c, req.Model, "anthropic", inputTokens, outputTokens, inputTokens+outputTokens, 499, latency)
 			return false
 		}
 	})
+}
+
+func (h *AnthropicHandler) logUsage(c *gin.Context, model, provider string, inputTokens, outputTokens, totalTokens, statusCode, latency int) {
+	// 提取 API Key 信息
+	userID, _ := c.Get("user_id")
+	apiKeyID, _ := c.Get("api_key_id")
+
+	uid, ok := userID.(int64)
+	if !ok {
+		// 如果没有用户ID（例如未认证），则不记录或记录为匿名
+		return
+	}
+
+	akID, ok := apiKeyID.(int64)
+	var akIDPtr *int64
+	if ok {
+		akIDPtr = &akID
+	}
+
+	log := &domain.UsageLog{
+		UserID:       uid,
+		APIKeyID:     akIDPtr,
+		Model:        model,
+		Provider:     provider,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		LatencyMs:    latency,
+		StatusCode:   statusCode,
+	}
+
+	// 异步记录
+	go func() {
+		if err := h.usageSvc.LogRequest(context.Background(), log); err != nil {
+			h.logger.Error("failed to log usage", zap.Error(err))
+		}
+	}()
 }

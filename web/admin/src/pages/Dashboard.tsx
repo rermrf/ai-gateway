@@ -1,44 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { dashboardApi } from '@/api'
-import { Server, GitBranch, Scale, Key } from 'lucide-react'
+import { dashboardApi, userApi } from '@/api'
+import { Users, Key, Activity, DollarSign, Database } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 export function Dashboard() {
-    const { data: stats, isLoading } = useQuery({
-        queryKey: ['dashboard-stats'],
+    const { user } = useAuth()
+    const isAdmin = user?.role === 'admin'
+
+    // Admin query
+    const { data: adminStats, isLoading: isAdminLoading, error: adminError } = useQuery({
+        queryKey: ['admin-stats'],
         queryFn: dashboardApi.getStats,
+        enabled: isAdmin,
     })
 
-    const cards = [
-        {
-            title: '提供商',
-            value: stats?.providerCount ?? 0,
-            icon: Server,
-            color: 'text-blue-500',
-            bgColor: 'bg-blue-500/10',
-        },
-        {
-            title: '路由规则',
-            value: stats?.routingRuleCount ?? 0,
-            icon: GitBranch,
-            color: 'text-green-500',
-            bgColor: 'bg-green-500/10',
-        },
-        {
-            title: '负载均衡组',
-            value: stats?.loadBalanceCount ?? 0,
-            icon: Scale,
-            color: 'text-purple-500',
-            bgColor: 'bg-purple-500/10',
-        },
-        {
-            title: 'API 密钥',
-            value: stats?.apiKeyCount ?? 0,
-            icon: Key,
-            color: 'text-orange-500',
-            bgColor: 'bg-orange-500/10',
-        },
-    ]
+    // User query
+    const { data: userStats, isLoading: isUserLoading, error: userError } = useQuery({
+        queryKey: ['user-stats'],
+        queryFn: userApi.getUsage,
+        enabled: !isAdmin,
+    })
+
+    const isLoading = isAdmin ? isAdminLoading : isUserLoading
+    const error = isAdmin ? adminError : userError
 
     if (isLoading) {
         return (
@@ -58,24 +43,87 @@ export function Dashboard() {
         )
     }
 
+    if (error) {
+        return (
+            <div className="p-4 text-red-500 bg-red-50 border border-red-200 rounded-md">
+                加载统计数据失败: {(error as Error).message}
+            </div>
+        )
+    }
+
+    const cards = isAdmin ? [
+        {
+            title: '总用户数',
+            value: adminStats?.userCount ?? 0,
+            icon: Users,
+            color: 'text-blue-500',
+            bgColor: 'bg-blue-500/10',
+        },
+        {
+            title: 'API 密钥数',
+            value: adminStats?.apiKeyCount ?? 0,
+            icon: Key,
+            color: 'text-orange-500',
+            bgColor: 'bg-orange-500/10',
+        },
+        {
+            title: '总请求数',
+            value: adminStats?.usage?.totalRequests ?? 0,
+            icon: Activity,
+            color: 'text-green-500',
+            bgColor: 'bg-green-500/10',
+        },
+        {
+            title: '总消耗 Token',
+            value: ((adminStats?.usage?.totalInputTokens ?? 0) + (adminStats?.usage?.totalOutputTokens ?? 0)).toLocaleString(),
+            icon: Database,
+            color: 'text-purple-500',
+            bgColor: 'bg-purple-500/10',
+        },
+    ] : [
+        {
+            title: '总请求数',
+            value: userStats?.totalRequests ?? 0,
+            icon: Activity,
+            color: 'text-green-500',
+            bgColor: 'bg-green-500/10',
+        },
+        {
+            title: '消耗 Token',
+            value: ((userStats?.totalInputTokens ?? 0) + (userStats?.totalOutputTokens ?? 0)).toLocaleString(),
+            icon: Database,
+            color: 'text-purple-500',
+            bgColor: 'bg-purple-500/10',
+        },
+        {
+            title: '平均延迟',
+            value: `${userStats?.avgLatencyMs ?? 0}ms`,
+            icon: Activity,
+            color: 'text-yellow-500', // Changed icon/color since cost isn't ready
+            bgColor: 'bg-yellow-500/10',
+        },
+    ]
+
     return (
         <div className="space-y-6">
+            <h2 className="text-3xl font-bold tracking-tight">仪表盘</h2>
+
             {/* 统计卡片 */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 {cards.map((card) => {
                     const Icon = card.icon
                     return (
                         <Card key={card.title}>
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                                 <CardTitle className="text-sm font-medium text-muted-foreground">
                                     {card.title}
                                 </CardTitle>
-                                <div className={`rounded-lg p-2 ${card.bgColor}`}>
+                                <div className={`rounded-full p-2 ${card.bgColor}`}>
                                     <Icon className={`h-4 w-4 ${card.color}`} />
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold">{card.value}</div>
+                                <div className="text-2xl font-bold">{card.value}</div>
                             </CardContent>
                         </Card>
                     )
@@ -85,12 +133,13 @@ export function Dashboard() {
             {/* 欢迎信息 */}
             <Card>
                 <CardHeader>
-                    <CardTitle>欢迎使用 AI Gateway 管理后台</CardTitle>
+                    <CardTitle>欢迎回来, {user?.username}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <p className="text-muted-foreground">
-                        在这里您可以管理 AI 提供商、配置路由规则、设置负载均衡策略以及管理 API 密钥。
-                        使用左侧导航栏快速访问各个功能模块。
+                        {isAdmin
+                            ? "作为管理员，您可以管理系统用户、配置 AI 提供商和路由规则，并查看全局使用情况。"
+                            : "在这里您可以查看 API 使用情况，管理您的 API 密钥。"}
                     </p>
                 </CardContent>
             </Card>

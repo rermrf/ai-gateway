@@ -148,6 +148,9 @@ func registerRoutes(
 
 		// 仪表盘统计
 		adminGroup.GET("/dashboard/stats", adminHandler.DashboardStats)
+
+		// 全局使用统计
+		adminGroup.GET("/usage/global", adminHandler.GetGlobalUsage)
 	}
 
 	// 静态文件服务（生产模式下托管前端）

@@ -5,18 +5,19 @@ package repository
 import (
 	"context"
 
+	"ai-gateway/internal/domain"
 	"ai-gateway/internal/repository/dao"
 )
 
 // ProviderRepository 定义 Provider 实体的存储库接口。
 type ProviderRepository interface {
-	Create(ctx context.Context, provider *dao.Provider) error
-	Update(ctx context.Context, provider *dao.Provider) error
+	Create(ctx context.Context, provider *domain.Provider) error
+	Update(ctx context.Context, provider *domain.Provider) error
 	Delete(ctx context.Context, id int64) error
-	GetByID(ctx context.Context, id int64) (*dao.Provider, error)
-	GetByName(ctx context.Context, name string) (*dao.Provider, error)
-	List(ctx context.Context) ([]dao.Provider, error)
-	GetDefaultByType(ctx context.Context, providerType string) (*dao.Provider, error)
+	GetByID(ctx context.Context, id int64) (*domain.Provider, error)
+	GetByName(ctx context.Context, name string) (*domain.Provider, error)
+	List(ctx context.Context) ([]domain.Provider, error)
+	GetDefaultByType(ctx context.Context, providerType string) (*domain.Provider, error)
 }
 
 // providerRepository 是 ProviderRepository 的默认实现。
@@ -29,30 +30,93 @@ func NewProviderRepository(providerDAO dao.ProviderDAO) ProviderRepository {
 	return &providerRepository{dao: providerDAO}
 }
 
-func (r *providerRepository) Create(ctx context.Context, p *dao.Provider) error {
-	return r.dao.Create(ctx, p)
+// toDAO 将 domain.Provider 转换为 dao.Provider
+func (r *providerRepository) toDAO(p *domain.Provider) *dao.Provider {
+	return &dao.Provider{
+		ID:        p.ID,
+		Name:      p.Name,
+		Type:      p.Type,
+		APIKey:    p.APIKey,
+		BaseURL:   p.BaseURL,
+		TimeoutMs: p.TimeoutMs,
+		IsDefault: p.IsDefault,
+		Enabled:   p.Enabled,
+		CreatedAt: p.CreatedAt,
+		UpdatedAt: p.UpdatedAt,
+	}
 }
 
-func (r *providerRepository) Update(ctx context.Context, p *dao.Provider) error {
-	return r.dao.Update(ctx, p)
+// toDomain 将 dao.Provider 转换为 domain.Provider
+func (r *providerRepository) toDomain(p *dao.Provider) *domain.Provider {
+	if p == nil {
+		return nil
+	}
+	return &domain.Provider{
+		ID:        p.ID,
+		Name:      p.Name,
+		Type:      p.Type,
+		APIKey:    p.APIKey,
+		BaseURL:   p.BaseURL,
+		TimeoutMs: p.TimeoutMs,
+		IsDefault: p.IsDefault,
+		Enabled:   p.Enabled,
+		CreatedAt: p.CreatedAt,
+		UpdatedAt: p.UpdatedAt,
+	}
+}
+
+func (r *providerRepository) Create(ctx context.Context, p *domain.Provider) error {
+	daoProvider := r.toDAO(p)
+	if err := r.dao.Create(ctx, daoProvider); err != nil {
+		return err
+	}
+	p.ID = daoProvider.ID
+	p.CreatedAt = daoProvider.CreatedAt
+	p.UpdatedAt = daoProvider.UpdatedAt
+	return nil
+}
+
+func (r *providerRepository) Update(ctx context.Context, p *domain.Provider) error {
+	return r.dao.Update(ctx, r.toDAO(p))
 }
 
 func (r *providerRepository) Delete(ctx context.Context, id int64) error {
 	return r.dao.Delete(ctx, id)
 }
 
-func (r *providerRepository) GetByID(ctx context.Context, id int64) (*dao.Provider, error) {
-	return r.dao.GetByID(ctx, id)
+func (r *providerRepository) GetByID(ctx context.Context, id int64) (*domain.Provider, error) {
+	daoProvider, err := r.dao.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomain(daoProvider), nil
 }
 
-func (r *providerRepository) GetByName(ctx context.Context, name string) (*dao.Provider, error) {
-	return r.dao.GetByName(ctx, name)
+func (r *providerRepository) GetByName(ctx context.Context, name string) (*domain.Provider, error) {
+	daoProvider, err := r.dao.GetByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomain(daoProvider), nil
 }
 
-func (r *providerRepository) List(ctx context.Context) ([]dao.Provider, error) {
-	return r.dao.List(ctx)
+func (r *providerRepository) List(ctx context.Context) ([]domain.Provider, error) {
+	daoProviders, err := r.dao.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	providers := make([]domain.Provider, len(daoProviders))
+	for i, p := range daoProviders {
+		providers[i] = *r.toDomain(&p)
+	}
+	return providers, nil
 }
 
-func (r *providerRepository) GetDefaultByType(ctx context.Context, providerType string) (*dao.Provider, error) {
-	return r.dao.GetDefaultByType(ctx, providerType)
+func (r *providerRepository) GetDefaultByType(ctx context.Context, providerType string) (*domain.Provider, error) {
+	daoProvider, err := r.dao.GetDefaultByType(ctx, providerType)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomain(daoProvider), nil
 }

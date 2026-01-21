@@ -160,33 +160,33 @@ export function RoutingRules() {
                                 </thead>
                                 <tbody>
                                     {rules.map((rule: RoutingRule) => (
-                                        <tr key={rule.ID} className="border-b last:border-0">
+                                        <tr key={rule.id} className="border-b last:border-0">
                                             <td className="py-3">
                                                 <span className="rounded-full bg-secondary px-2 py-1 text-xs">
-                                                    {rule.RuleType}
+                                                    {rule.ruleType}
                                                 </span>
                                             </td>
-                                            <td className="py-3 font-mono text-sm">{rule.Pattern}</td>
-                                            <td className="py-3">{rule.ProviderName}</td>
+                                            <td className="py-3 font-mono text-sm">{rule.pattern}</td>
+                                            <td className="py-3">{rule.providerName}</td>
                                             <td className="py-3 text-sm text-muted-foreground">
-                                                {rule.ActualModel || '-'}
+                                                {rule.actualModel || '-'}
                                             </td>
-                                            <td className="py-3">{rule.Priority}</td>
+                                            <td className="py-3">{rule.priority}</td>
                                             <td className="py-3">
                                                 <span
-                                                    className={`rounded-full px-2 py-1 text-xs ${rule.Enabled
-                                                            ? 'bg-green-100 text-green-700'
-                                                            : 'bg-red-100 text-red-700'
+                                                    className={`rounded-full px-2 py-1 text-xs ${rule.enabled
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : 'bg-red-100 text-red-700'
                                                         }`}
                                                 >
-                                                    {rule.Enabled ? '启用' : '禁用'}
+                                                    {rule.enabled ? '启用' : '禁用'}
                                                 </span>
                                             </td>
                                             <td className="py-3">
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    onClick={() => deleteMutation.mutate(rule.ID)}
+                                                    onClick={() => deleteMutation.mutate(rule.id)}
                                                     disabled={deleteMutation.isPending}
                                                 >
                                                     <Trash2 className="h-4 w-4 text-destructive" />

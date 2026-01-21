@@ -1,15 +1,15 @@
 // Provider 类型定义
 export interface Provider {
-    ID: number
-    Name: string
-    Type: string
-    APIKey: string
-    BaseURL: string
-    TimeoutMs: number
-    IsDefault: boolean
-    Enabled: boolean
-    CreatedAt: string
-    UpdatedAt: string
+    id: number
+    name: string
+    type: string
+    apiKey: string
+    baseURL: string
+    timeoutMs: number
+    isDefault: boolean
+    enabled: boolean
+    createdAt: string
+    updatedAt: string
 }
 
 export interface CreateProviderRequest {
@@ -24,15 +24,15 @@ export interface CreateProviderRequest {
 
 // 路由规则类型定义
 export interface RoutingRule {
-    ID: number
-    RuleType: string
-    Pattern: string
-    ProviderName: string
-    ActualModel: string
-    Priority: number
-    Enabled: boolean
-    CreatedAt: string
-    UpdatedAt: string
+    id: number
+    ruleType: string
+    pattern: string
+    providerName: string
+    actualModel: string
+    priority: number
+    enabled: boolean
+    createdAt: string
+    updatedAt: string
 }
 
 export interface CreateRoutingRuleRequest {
@@ -46,13 +46,13 @@ export interface CreateRoutingRuleRequest {
 
 // 负载均衡类型定义
 export interface LoadBalanceGroup {
-    ID: number
-    Name: string
-    ModelPattern: string
-    Strategy: string
-    Enabled: boolean
-    CreatedAt: string
-    UpdatedAt: string
+    id: number
+    name: string
+    modelPattern: string
+    strategy: string
+    enabled: boolean
+    createdAt: string
+    updatedAt: string
 }
 
 export interface CreateLoadBalanceGroupRequest {
@@ -79,10 +79,9 @@ export interface CreateAPIKeyRequest {
 
 // 仪表盘统计类型定义
 export interface DashboardStats {
-    providerCount: number
-    routingRuleCount: number
-    loadBalanceCount: number
+    userCount: number
     apiKeyCount: number
+    usage: UsageStats
 }
 
 // API 响应类型
@@ -132,12 +131,16 @@ export interface ChangePasswordRequest {
 
 export interface UsageStats {
     totalRequests: number
-    totalTokens: number
-    cost: number
+    totalInputTokens: number
+    totalOutputTokens: number
+    avgLatencyMs: number
+    successCount: number
+    errorCount: number
 }
 
 export interface DailyUsage {
     date: string
     requests: number
-    tokens: number
+    inputTokens: number
+    outputTokens: number
 }

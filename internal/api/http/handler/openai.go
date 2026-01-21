@@ -3,9 +3,11 @@ package handler
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -13,19 +15,22 @@ import (
 	"ai-gateway/internal/converter"
 	"ai-gateway/internal/domain"
 	gatewaysvc "ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/usage"
 )
 
 // OpenAIHandler 处理 OpenAI 兼容的 API 请求。
 type OpenAIHandler struct {
 	gw        gatewaysvc.GatewayService
+	usageSvc  usage.Service
 	converter *converter.OpenAIConverter
 	logger    *zap.Logger
 }
 
 // NewOpenAIHandler 创建一个新的 OpenAI 处理器。
-func NewOpenAIHandler(gw gatewaysvc.GatewayService, logger *zap.Logger) *OpenAIHandler {
+func NewOpenAIHandler(gw gatewaysvc.GatewayService, usageSvc usage.Service, logger *zap.Logger) *OpenAIHandler {
 	return &OpenAIHandler{
 		gw:        gw,
+		usageSvc:  usageSvc,
 		converter: converter.NewOpenAIConverter(),
 		logger:    logger.Named("handler.openai"),
 	}
@@ -33,6 +38,7 @@ func NewOpenAIHandler(gw gatewaysvc.GatewayService, logger *zap.Logger) *OpenAIH
 
 // ChatCompletions 处理 POST /v1/chat/completions
 func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
+	start := time.Now()
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		h.logger.Error("failed to read request body", zap.Error(err))
@@ -58,13 +64,13 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	if req.Stream {
-		h.handleStream(c, req)
+		h.handleStream(c, req, start)
 	} else {
-		h.handleNonStream(c, req)
+		h.handleNonStream(c, req, start)
 	}
 }
 
-func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest) {
+func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
 	resp, err := h.gw.Chat(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("chat request failed", zap.Error(err))
@@ -76,6 +82,10 @@ func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest)
 		})
 		return
 	}
+
+	// 记录使用情况
+	latency := int(time.Since(start).Milliseconds())
+	h.logUsage(c, req.Model, resp.Provider, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens, http.StatusOK, latency)
 
 	respBody, err := h.converter.EncodeResponse(resp)
 	if err != nil {
@@ -92,8 +102,8 @@ func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest)
 	c.Data(http.StatusOK, "application/json", respBody)
 }
 
-func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest) {
-	deltaCh, err := h.gw.ChatStream(c.Request.Context(), req)
+func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
+	deltaCh, providerName, err := h.gw.ChatStream(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("stream request failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -110,13 +120,43 @@ func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest) {
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
 
+	// 跟踪使用情况
+	var inputTokens, outputTokens int
+	// 用于捕获提供商名称（如果我们在流Delta中得到它，或者我们只使用我们在开始时得到的那个）
+	// 注意：handleStream 函数没有访问实际使用的提供商名称，因为它在 h.gw.ChatStream 内部解析。
+	// 这是一个小的设计缺陷。现在我们只能记录请求的模型。
+	// 或者我们等待流结束后，尝试从上下文中获取，或者让 GatewayService 返回它。
+	// 暂时使用 req.Model 作为提供商（由于重写，它可能是实际模型）。
+	// 更好的方法是让 ChatStream 返回 (chan, providerName, err)。
+	// 为了快速修复，我们假设使用情况将在流结束时记录，这里我们先尽力而为。
+	// 实际上，DeepSeek/OpenAI 流在最后一个块中发送 usage。
+	// 我们需要解析它。
+
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case delta, ok := <-deltaCh:
 			if !ok {
 				// 流已结束
 				fmt.Fprintf(w, "data: [DONE]\n\n")
+
+				// 记录使用情况
+				// 目前假设 outputTokens 是 delta 数量 * 1 (非常粗略) 或 0
+				latency := int(time.Since(start).Milliseconds())
+				h.logUsage(c, req.Model, providerName, inputTokens, outputTokens, inputTokens+outputTokens, http.StatusOK, latency)
 				return false
+			}
+
+			// 更新 Output Tokens
+			if delta.Content != nil {
+				if delta.Content.Text != "" || delta.Content.Thinking != "" {
+					outputTokens++
+				}
+			}
+
+			// 如果 Delta 有 Usage 字段 (需要更新 Domain StreamDelta)
+			if delta.Usage != nil {
+				inputTokens = delta.Usage.PromptTokens
+				outputTokens = delta.Usage.CompletionTokens
 			}
 
 			chunk, err := h.converter.EncodeStreamDelta(&delta)
@@ -135,15 +175,57 @@ func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest) {
 			// Check if this was the final delta
 			if delta.Type == "done" {
 				fmt.Fprintf(w, "data: [DONE]\n\n")
+				// 记录使用情况
+				latency := int(time.Since(start).Milliseconds())
+				h.logUsage(c, req.Model, providerName, inputTokens, outputTokens, inputTokens+outputTokens, http.StatusOK, latency)
 				return false
 			}
 
 			return true
 
 		case <-c.Request.Context().Done():
+			// 客户端断开连接，记录部分使用情况
+			latency := int(time.Since(start).Milliseconds())
+			h.logUsage(c, req.Model, providerName, inputTokens, outputTokens, inputTokens+outputTokens, 499, latency)
 			return false
 		}
 	})
+}
+
+func (h *OpenAIHandler) logUsage(c *gin.Context, model, provider string, inputTokens, outputTokens, totalTokens, statusCode, latency int) {
+	// 提取 API Key 信息
+	userID, _ := c.Get("user_id")
+	apiKeyID, _ := c.Get("api_key_id")
+
+	uid, ok := userID.(int64)
+	if !ok {
+		// 如果没有用户ID（例如未认证），则不记录或记录为匿名
+		return
+	}
+
+	akID, ok := apiKeyID.(int64)
+	var akIDPtr *int64
+	if ok {
+		akIDPtr = &akID
+	}
+
+	log := &domain.UsageLog{
+		UserID:       uid,
+		APIKeyID:     akIDPtr,
+		Model:        model,
+		Provider:     provider,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		LatencyMs:    latency,
+		StatusCode:   statusCode,
+	}
+
+	// 异步记录
+	go func() {
+		if err := h.usageSvc.LogRequest(context.Background(), log); err != nil {
+			h.logger.Error("failed to log usage", zap.Error(err))
+		}
+	}()
 }
 
 // ListModels 处理 GET /v1/models

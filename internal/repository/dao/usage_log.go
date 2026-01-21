@@ -72,11 +72,11 @@ func (d *GormUsageLogDAO) GetStatsByUserID(ctx context.Context, userID int64) (*
 	err := d.db.WithContext(ctx).Model(&UsageLog{}).
 		Select(`
 			COUNT(*) as total_requests,
-			COALESCE(SUM(input_tokens), 0) as total_inputs,
-			COALESCE(SUM(output_tokens), 0) as total_outputs,
-			COALESCE(AVG(latency_ms), 0) as avg_latency_ms,
-			SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) as success_count,
-			SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count
+			CAST(COALESCE(SUM(input_tokens), 0) AS UNSIGNED) as total_inputs,
+			CAST(COALESCE(SUM(output_tokens), 0) AS UNSIGNED) as total_outputs,
+			CAST(COALESCE(AVG(latency_ms), 0) AS UNSIGNED) as avg_latency_ms,
+			CAST(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) AS UNSIGNED) as success_count,
+			CAST(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS UNSIGNED) as error_count
 		`).
 		Where("user_id = ?", userID).
 		Scan(&stats).Error
@@ -89,8 +89,8 @@ func (d *GormUsageLogDAO) GetDailyUsageByUserID(ctx context.Context, userID int6
 		Select(`
 			DATE(created_at) as date,
 			COUNT(*) as requests,
-			COALESCE(SUM(input_tokens), 0) as input_tokens,
-			COALESCE(SUM(output_tokens), 0) as output_tokens
+			CAST(COALESCE(SUM(input_tokens), 0) AS UNSIGNED) as input_tokens,
+			CAST(COALESCE(SUM(output_tokens), 0) AS UNSIGNED) as output_tokens
 		`).
 		Where("user_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)", userID, days).
 		Group("DATE(created_at)").
@@ -104,11 +104,11 @@ func (d *GormUsageLogDAO) GetGlobalStats(ctx context.Context) (*UsageStats, erro
 	err := d.db.WithContext(ctx).Model(&UsageLog{}).
 		Select(`
 			COUNT(*) as total_requests,
-			COALESCE(SUM(input_tokens), 0) as total_inputs,
-			COALESCE(SUM(output_tokens), 0) as total_outputs,
-			COALESCE(AVG(latency_ms), 0) as avg_latency_ms,
-			SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) as success_count,
-			SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count
+			CAST(COALESCE(SUM(input_tokens), 0) AS UNSIGNED) as total_inputs,
+			CAST(COALESCE(SUM(output_tokens), 0) AS UNSIGNED) as total_outputs,
+			CAST(COALESCE(AVG(latency_ms), 0) AS UNSIGNED) as avg_latency_ms,
+			CAST(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) AS UNSIGNED) as success_count,
+			CAST(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS UNSIGNED) as error_count
 		`).
 		Scan(&stats).Error
 	return &stats, err

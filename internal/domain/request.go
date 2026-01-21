@@ -146,6 +146,9 @@ type ChatResponse struct {
 
 	// 令牌使用统计数据
 	Usage *TokenUsage `json:"usage,omitempty"`
+
+	// 提供商名称 (内部使用)
+	Provider string `json:"-"`
 }
 
 // StreamDelta 表示流式响应中的单个分块。

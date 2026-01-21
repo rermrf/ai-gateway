@@ -65,15 +65,15 @@ export function Providers() {
     }
 
     const startEdit = (provider: Provider) => {
-        setEditingId(provider.ID)
+        setEditingId(provider.id)
         setFormData({
-            name: provider.Name,
-            type: provider.Type,
-            apiKey: provider.APIKey,
-            baseURL: provider.BaseURL,
-            timeoutMs: provider.TimeoutMs,
-            isDefault: provider.IsDefault,
-            enabled: provider.Enabled,
+            name: provider.name,
+            type: provider.type,
+            apiKey: provider.apiKey,
+            baseURL: provider.baseURL,
+            timeoutMs: provider.timeoutMs,
+            isDefault: provider.isDefault,
+            enabled: provider.enabled,
         })
     }
 
@@ -218,26 +218,26 @@ export function Providers() {
                                 </thead>
                                 <tbody>
                                     {providers.map((provider) => (
-                                        <tr key={provider.ID} className="border-b last:border-0">
-                                            <td className="py-3 font-medium">{provider.Name}</td>
+                                        <tr key={provider.id} className="border-b last:border-0">
+                                            <td className="py-3 font-medium">{provider.name}</td>
                                             <td className="py-3">
                                                 <span className="rounded-full bg-secondary px-2 py-1 text-xs">
-                                                    {provider.Type}
+                                                    {provider.type}
                                                 </span>
                                             </td>
                                             <td className="py-3 text-sm text-muted-foreground">
-                                                {provider.BaseURL}
+                                                {provider.baseURL}
                                             </td>
                                             <td className="py-3">
                                                 <span
-                                                    className={`rounded-full px-2 py-1 text-xs ${provider.Enabled
-                                                            ? 'bg-green-100 text-green-700'
-                                                            : 'bg-red-100 text-red-700'
+                                                    className={`rounded-full px-2 py-1 text-xs ${provider.enabled
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : 'bg-red-100 text-red-700'
                                                         }`}
                                                 >
-                                                    {provider.Enabled ? '启用' : '禁用'}
+                                                    {provider.enabled ? '启用' : '禁用'}
                                                 </span>
-                                                {provider.IsDefault && (
+                                                {provider.isDefault && (
                                                     <span className="ml-2 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">
                                                         默认
                                                     </span>
@@ -255,7 +255,7 @@ export function Providers() {
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        onClick={() => deleteMutation.mutate(provider.ID)}
+                                                        onClick={() => deleteMutation.mutate(provider.id)}
                                                         disabled={deleteMutation.isPending}
                                                     >
                                                         <Trash2 className="h-4 w-4 text-destructive" />

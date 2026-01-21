@@ -9,41 +9,47 @@ import (
 	"go.uber.org/zap"
 
 	"ai-gateway/internal/domain"
-	"ai-gateway/internal/repository"
-	"ai-gateway/internal/repository/dao"
 	"ai-gateway/internal/service/apikey"
+	"ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/loadbalance"
+	"ai-gateway/internal/service/provider"
+	"ai-gateway/internal/service/routingrule"
+	"ai-gateway/internal/service/usage"
 	"ai-gateway/internal/service/user"
 )
 
 // AdminHandler 处理管理后台 API 请求。
 type AdminHandler struct {
-	providerRepo    repository.ProviderRepository
-	routingRuleRepo repository.RoutingRuleRepository
-	loadBalanceRepo repository.LoadBalanceRepository
-	apiKeySvc       apikey.Service
-	userSvc         user.Service
-	usageLogRepo    repository.UsageLogRepository
-	logger          *zap.Logger
+	providerSvc    provider.Service
+	routingRuleSvc routingrule.Service
+	loadBalanceSvc loadbalance.Service
+	apiKeySvc      apikey.Service
+	userSvc        user.Service
+	usageSvc       usage.Service
+	gatewaySvc     gateway.GatewayService
+	logger         *zap.Logger
 }
 
 // NewAdminHandler 创建一个新的 AdminHandler。
 func NewAdminHandler(
-	providerRepo repository.ProviderRepository,
-	routingRuleRepo repository.RoutingRuleRepository,
-	loadBalanceRepo repository.LoadBalanceRepository,
+	providerSvc provider.Service,
+	routingRuleSvc routingrule.Service,
+	loadBalanceSvc loadbalance.Service,
 	apiKeySvc apikey.Service,
 	userSvc user.Service,
-	usageLogRepo repository.UsageLogRepository,
+	usageSvc usage.Service,
+	gatewaySvc gateway.GatewayService,
 	logger *zap.Logger,
 ) *AdminHandler {
 	return &AdminHandler{
-		providerRepo:    providerRepo,
-		routingRuleRepo: routingRuleRepo,
-		loadBalanceRepo: loadBalanceRepo,
-		apiKeySvc:       apiKeySvc,
-		userSvc:         userSvc,
-		usageLogRepo:    usageLogRepo,
-		logger:          logger.Named("handler.admin"),
+		providerSvc:    providerSvc,
+		routingRuleSvc: routingRuleSvc,
+		loadBalanceSvc: loadBalanceSvc,
+		apiKeySvc:      apiKeySvc,
+		userSvc:        userSvc,
+		usageSvc:       usageSvc,
+		gatewaySvc:     gatewaySvc,
+		logger:         logger.Named("handler.admin"),
 	}
 }
 
@@ -51,7 +57,7 @@ func NewAdminHandler(
 
 // ListProviders 获取所有提供商列表。
 func (h *AdminHandler) ListProviders(c *gin.Context) {
-	providers, err := h.providerRepo.List(c.Request.Context())
+	providers, err := h.providerSvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list providers", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list providers"})
@@ -68,7 +74,7 @@ func (h *AdminHandler) GetProvider(c *gin.Context) {
 		return
 	}
 
-	provider, err := h.providerRepo.GetByID(c.Request.Context(), id)
+	provider, err := h.providerSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get provider", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get provider"})
@@ -100,7 +106,7 @@ func (h *AdminHandler) CreateProvider(c *gin.Context) {
 		return
 	}
 
-	provider := &dao.Provider{
+	provider := &domain.Provider{
 		Name:      req.Name,
 		Type:      req.Type,
 		APIKey:    req.APIKey,
@@ -110,10 +116,14 @@ func (h *AdminHandler) CreateProvider(c *gin.Context) {
 		Enabled:   req.Enabled,
 	}
 
-	if err := h.providerRepo.Create(c.Request.Context(), provider); err != nil {
+	if err := h.providerSvc.Create(c.Request.Context(), provider); err != nil {
 		h.logger.Error("failed to create provider", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create provider"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": provider})
 }
@@ -126,7 +136,7 @@ func (h *AdminHandler) UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	provider, err := h.providerRepo.GetByID(c.Request.Context(), id)
+	provider, err := h.providerSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get provider", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get provider"})
@@ -151,10 +161,14 @@ func (h *AdminHandler) UpdateProvider(c *gin.Context) {
 	provider.IsDefault = req.IsDefault
 	provider.Enabled = req.Enabled
 
-	if err := h.providerRepo.Update(c.Request.Context(), provider); err != nil {
+	if err := h.providerSvc.Update(c.Request.Context(), provider); err != nil {
 		h.logger.Error("failed to update provider", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update provider"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": provider})
 }
@@ -167,10 +181,14 @@ func (h *AdminHandler) DeleteProvider(c *gin.Context) {
 		return
 	}
 
-	if err := h.providerRepo.Delete(c.Request.Context(), id); err != nil {
+	if err := h.providerSvc.Delete(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete provider", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete provider"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
@@ -179,7 +197,7 @@ func (h *AdminHandler) DeleteProvider(c *gin.Context) {
 
 // ListRoutingRules 获取所有路由规则。
 func (h *AdminHandler) ListRoutingRules(c *gin.Context) {
-	rules, err := h.routingRuleRepo.List(c.Request.Context())
+	rules, err := h.routingRuleSvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list routing rules", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list routing rules"})
@@ -206,7 +224,7 @@ func (h *AdminHandler) CreateRoutingRule(c *gin.Context) {
 		return
 	}
 
-	rule := &dao.RoutingRule{
+	rule := &domain.RoutingRule{
 		RuleType:     req.RuleType,
 		Pattern:      req.Pattern,
 		ProviderName: req.ProviderName,
@@ -215,10 +233,14 @@ func (h *AdminHandler) CreateRoutingRule(c *gin.Context) {
 		Enabled:      req.Enabled,
 	}
 
-	if err := h.routingRuleRepo.Create(c.Request.Context(), rule); err != nil {
+	if err := h.routingRuleSvc.Create(c.Request.Context(), rule); err != nil {
 		h.logger.Error("failed to create routing rule", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create routing rule"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": rule})
 }
@@ -237,7 +259,7 @@ func (h *AdminHandler) UpdateRoutingRule(c *gin.Context) {
 		return
 	}
 
-	rule := &dao.RoutingRule{
+	rule := &domain.RoutingRule{
 		ID:           id,
 		RuleType:     req.RuleType,
 		Pattern:      req.Pattern,
@@ -247,10 +269,14 @@ func (h *AdminHandler) UpdateRoutingRule(c *gin.Context) {
 		Enabled:      req.Enabled,
 	}
 
-	if err := h.routingRuleRepo.Update(c.Request.Context(), rule); err != nil {
+	if err := h.routingRuleSvc.Update(c.Request.Context(), rule); err != nil {
 		h.logger.Error("failed to update routing rule", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update routing rule"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": rule})
 }
@@ -263,10 +289,14 @@ func (h *AdminHandler) DeleteRoutingRule(c *gin.Context) {
 		return
 	}
 
-	if err := h.routingRuleRepo.Delete(c.Request.Context(), id); err != nil {
+	if err := h.routingRuleSvc.Delete(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete routing rule", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete routing rule"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
@@ -275,7 +305,7 @@ func (h *AdminHandler) DeleteRoutingRule(c *gin.Context) {
 
 // ListLoadBalanceGroups 获取所有负载均衡组。
 func (h *AdminHandler) ListLoadBalanceGroups(c *gin.Context) {
-	groups, err := h.loadBalanceRepo.ListGroups(c.Request.Context())
+	groups, err := h.loadBalanceSvc.ListGroups(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list load balance groups", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list load balance groups"})
@@ -300,17 +330,21 @@ func (h *AdminHandler) CreateLoadBalanceGroup(c *gin.Context) {
 		return
 	}
 
-	group := &dao.LoadBalanceGroup{
+	group := &domain.LoadBalanceGroup{
 		Name:         req.Name,
 		ModelPattern: req.ModelPattern,
 		Strategy:     req.Strategy,
 		Enabled:      req.Enabled,
 	}
 
-	if err := h.loadBalanceRepo.CreateGroup(c.Request.Context(), group); err != nil {
+	if err := h.loadBalanceSvc.CreateGroup(c.Request.Context(), group); err != nil {
 		h.logger.Error("failed to create load balance group", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create load balance group"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": group})
 }
@@ -323,10 +357,14 @@ func (h *AdminHandler) DeleteLoadBalanceGroup(c *gin.Context) {
 		return
 	}
 
-	if err := h.loadBalanceRepo.DeleteGroup(c.Request.Context(), id); err != nil {
+	if err := h.loadBalanceSvc.DeleteGroup(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete load balance group", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete load balance group"})
 		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
@@ -462,7 +500,10 @@ func (h *AdminHandler) DashboardStats(c *gin.Context) {
 	keyCount := len(keys)
 
 	// 获取全局使用统计
-	stats, _ := h.usageLogRepo.GetGlobalStats(c.Request.Context())
+	stats, err := h.usageSvc.GetGlobalStats(c.Request.Context())
+	if err != nil {
+		h.logger.Error("failed to get global stats", zap.Error(err))
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
@@ -484,4 +525,15 @@ func (h *AdminHandler) toUserResponse(u *domain.User) map[string]interface{} {
 		"createdAt": u.CreatedAt.UnixMilli(),
 		"updatedAt": u.UpdatedAt.UnixMilli(),
 	}
+}
+
+// GetGlobalUsage 获取全局使用统计（管理员）。
+func (h *AdminHandler) GetGlobalUsage(c *gin.Context) {
+	stats, err := h.usageSvc.GetGlobalStats(c.Request.Context())
+	if err != nil {
+		h.logger.Error("failed to get global usage", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get global usage"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
