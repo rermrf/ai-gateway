@@ -159,6 +159,11 @@ export const loadBalanceApi = {
         return res.data.data
     },
 
+    updateGroup: async (id: number, data: CreateLoadBalanceGroupRequest): Promise<LoadBalanceGroup> => {
+        const res = await apiClient.put<ApiResponse<LoadBalanceGroup>>(`/admin/load-balance-groups/${id}`, data)
+        return res.data.data
+    },
+
     deleteGroup: async (id: number): Promise<void> => {
         await apiClient.delete(`/admin/load-balance-groups/${id}`)
     },

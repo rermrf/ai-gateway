@@ -134,6 +134,7 @@ func registerRoutes(
 		// 负载均衡管理
 		adminGroup.GET("/load-balance-groups", adminHandler.ListLoadBalanceGroups)
 		adminGroup.POST("/load-balance-groups", adminHandler.CreateLoadBalanceGroup)
+		adminGroup.PUT("/load-balance-groups/:id", adminHandler.UpdateLoadBalanceGroup)
 		adminGroup.DELETE("/load-balance-groups/:id", adminHandler.DeleteLoadBalanceGroup)
 
 		// API Key 管理（全局）

@@ -349,6 +349,48 @@ func (h *AdminHandler) CreateLoadBalanceGroup(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": group})
 }
 
+// UpdateLoadBalanceGroup 更新负载均衡组。
+func (h *AdminHandler) UpdateLoadBalanceGroup(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	group, err := h.loadBalanceSvc.GetGroupByID(c.Request.Context(), id)
+	if err != nil {
+		h.logger.Error("failed to get load balance group", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get load balance group"})
+		return
+	}
+	if group == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "load balance group not found"})
+		return
+	}
+
+	var req CreateLoadBalanceGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	group.Name = req.Name
+	group.ModelPattern = req.ModelPattern
+	group.Strategy = req.Strategy
+	group.Enabled = req.Enabled
+
+	if err := h.loadBalanceSvc.UpdateGroup(c.Request.Context(), group); err != nil {
+		h.logger.Error("failed to update load balance group", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update load balance group"})
+		return
+	}
+	// Reload gateway configuration
+	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
+		h.logger.Warn("failed to reload gateway configuration", zap.Error(err))
+	}
+	c.JSON(http.StatusOK, gin.H{"data": group})
+}
+
 // DeleteLoadBalanceGroup 删除负载均衡组。
 func (h *AdminHandler) DeleteLoadBalanceGroup(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
