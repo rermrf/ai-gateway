@@ -2,14 +2,15 @@
 export interface Provider {
     id: number
     name: string
-    type: string
+    type: string // openai, anthropic
     apiKey: string
     baseURL: string
+    models?: string[] // Optional list of models
     timeoutMs: number
     isDefault: boolean
     enabled: boolean
-    createdAt: string
-    updatedAt: string
+    createdAt: number
+    updatedAt: number
 }
 
 export interface CreateProviderRequest {
@@ -17,9 +18,10 @@ export interface CreateProviderRequest {
     type: string
     apiKey: string
     baseURL: string
-    timeoutMs?: number
-    isDefault?: boolean
-    enabled?: boolean
+    models?: string[]
+    timeoutMs: number
+    isDefault: boolean
+    enabled: boolean
 }
 
 // 路由规则类型定义
@@ -143,4 +145,47 @@ export interface DailyUsage {
     requests: number
     inputTokens: number
     outputTokens: number
+}
+// ========== Model Rate ==========
+
+export interface ModelRate {
+    id: number
+    modelPattern: string
+    promptPrice: number
+    completionPrice: number
+    enabled: boolean
+    createdAt: string
+    updatedAt: string
+}
+
+export interface CreateModelRateRequest {
+    modelPattern: string
+    promptPrice: number
+    completionPrice: number
+    enabled: boolean
+}
+
+// ========== Wallet ==========
+
+export interface Wallet {
+    id: number
+    userId: number
+    balance: number
+    updatedAt: string
+}
+
+export interface WalletTransaction {
+    id: number
+    walletId: number
+    type: string
+    amount: number
+    balanceBefore: number
+    balanceAfter: number
+    referenceId: string
+    description: string
+    createdAt: string
+}
+
+export interface TopUpRequest {
+    amount: number
 }

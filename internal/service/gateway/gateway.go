@@ -46,13 +46,14 @@ type gatewayService struct {
 	routingRuleRepo repository.RoutingRuleRepository
 	loadBalanceRepo repository.LoadBalanceRepository
 
-	providers     map[string]providers.Provider                       // 名称 -> 供应商
-	typeDefaults  map[string]string                                   // 类型 -> 默认供应商名称
-	routes        map[string]config.ModelRoute                        // 精确的模型路由
-	prefixRoutes  []prefixRouteEntry                                  // 按优先级排序
-	loadBalancers map[string]loadbalancer.LoadBalancer[*providerNode] // 模型模式 -> 负载均衡器
-	httpClient    *http.Client
-	logger        *zap.Logger
+	providers        map[string]providers.Provider                       // 名称 -> 供应商
+	configuredModels map[string][]string                                 // 供应商名称 -> 模型列表
+	typeDefaults     map[string]string                                   // 类型 -> 默认供应商名称
+	routes           map[string]config.ModelRoute                        // 精确的模型路由
+	prefixRoutes     []prefixRouteEntry                                  // 按优先级排序
+	loadBalancers    map[string]loadbalancer.LoadBalancer[*providerNode] // 模型模式 -> 负载均衡器
+	httpClient       *http.Client
+	logger           *zap.Logger
 }
 
 type prefixRouteEntry struct {
@@ -71,15 +72,16 @@ func NewGatewayService(
 	logger *zap.Logger,
 ) GatewayService {
 	g := &gatewayService{
-		providerRepo:    providerRepo,
-		routingRuleRepo: routingRuleRepo,
-		loadBalanceRepo: loadBalanceRepo,
-		providers:       make(map[string]providers.Provider),
-		typeDefaults:    make(map[string]string),
-		routes:          make(map[string]config.ModelRoute),
-		loadBalancers:   make(map[string]loadbalancer.LoadBalancer[*providerNode]),
-		httpClient:      &http.Client{Timeout: 120 * time.Second},
-		logger:          logger.Named("gateway"),
+		providerRepo:     providerRepo,
+		routingRuleRepo:  routingRuleRepo,
+		loadBalanceRepo:  loadBalanceRepo,
+		providers:        make(map[string]providers.Provider),
+		configuredModels: make(map[string][]string),
+		typeDefaults:     make(map[string]string),
+		routes:           make(map[string]config.ModelRoute),
+		loadBalancers:    make(map[string]loadbalancer.LoadBalancer[*providerNode]),
+		httpClient:       &http.Client{Timeout: 120 * time.Second},
+		logger:           logger.Named("gateway"),
 	}
 
 	// 初始从数据库加载
@@ -100,6 +102,7 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 
 	// 初始化供应商
 	newProviders := make(map[string]providers.Provider)
+	newConfiguredModels := make(map[string][]string)
 	newTypeDefaults := make(map[string]string)
 
 	for _, p := range dbProviders {
@@ -129,10 +132,16 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		}
 
 		newProviders[p.Name] = provider
+		// 存储配置的模型列表
+		if len(p.Models) > 0 {
+			newConfiguredModels[p.Name] = p.Models
+		}
+
 		g.logger.Info("registered provider from database",
 			zap.String("name", p.Name),
 			zap.String("type", p.Type),
 			zap.String("baseURL", p.BaseURL),
+			zap.Int("models", len(p.Models)),
 		)
 
 		// 跟踪每种类型的默认供应商
@@ -230,6 +239,7 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 
 	// 原子更新
 	g.providers = newProviders
+	g.configuredModels = newConfiguredModels
 	g.typeDefaults = newTypeDefaults
 	g.routes = newRoutes
 	g.prefixRoutes = newPrefixRoutes
@@ -365,16 +375,43 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 // ListModels 返回所有供应商提供的所有可用模型。
 func (g *gatewayService) ListModels(ctx context.Context) ([]string, error) {
 	var allModels []string
+	seen := make(map[string]bool)
+
+	// 1. 从配置的静态模型列表中获取
+	for _, models := range g.configuredModels {
+		for _, model := range models {
+			if !seen[model] {
+				allModels = append(allModels, model)
+				seen[model] = true
+			}
+		}
+	}
+
+	// 2. 如果需要，可以从 Provider 动态获取（目前作为回退或补充）
+	// 如果配置了静态模型，通常以此为准。
+	// 但如果某个 Provider 没有配置静态模型，我们可能希望尝试调用 API 获取。
 	for name, provider := range g.providers {
+		// 如果该 Provider 已经有配置的模型，跳过动态获取以节省 API 调用
+		if len(g.configuredModels[name]) > 0 {
+			continue
+		}
+
 		models, err := provider.ListModels(ctx)
 		if err != nil {
-			g.logger.Warn("failed to list models",
+			g.logger.Warn("failed to list models from provider",
 				zap.String("provider", name),
 				zap.Error(err),
 			)
 			continue
 		}
-		allModels = append(allModels, models...)
+		for _, model := range models {
+			if !seen[model] {
+				allModels = append(allModels, model)
+				seen[model] = true
+			}
+		}
 	}
+
+	sort.Strings(allModels)
 	return allModels, nil
 }

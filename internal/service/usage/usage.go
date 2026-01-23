@@ -8,6 +8,7 @@ import (
 
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/repository"
+	"ai-gateway/internal/service/wallet"
 )
 
 // Service 使用统计服务接口。
@@ -25,16 +26,19 @@ type Service interface {
 // service 使用统计服务实现。
 type service struct {
 	usageLogRepo repository.UsageLogRepository
+	walletSvc    wallet.Service
 	logger       *zap.Logger
 }
 
 // NewService 创建使用统计服务实例。
 func NewService(
 	usageLogRepo repository.UsageLogRepository,
+	walletSvc wallet.Service,
 	logger *zap.Logger,
 ) Service {
 	return &service{
 		usageLogRepo: usageLogRepo,
+		walletSvc:    walletSvc,
 		logger:       logger.Named("service.usage"),
 	}
 }
@@ -69,6 +73,25 @@ func (s *service) LogRequest(ctx context.Context, log *domain.UsageLog) error {
 	// 简单起见，我们直接调用 repo，假设调用方已经处理了异步逻辑或者就在同步链路中记录
 	// 为了不影响主请求延迟，建议调用方 go func() 调用，或者最好在这里 go func
 	// 但在这里 go func 需要 context 不被 cancel。
+
+	// 1. 尝试扣费 (同步执行，确保有余额)
+	// 注意：如果 LogRequest 是异步调用的，这里也会异步执行。
+	// 1. 尝试扣费 (同步执行，确保有余额)
+	// 注意：如果 LogRequest 是异步调用的，这里也会异步执行。
+
+	totalTokens := log.InputTokens + log.OutputTokens
+	if log.UserID > 0 && totalTokens > 0 {
+		if err := s.walletSvc.Deduct(ctx, log.UserID, log.InputTokens, log.OutputTokens, log.Model); err != nil {
+			// 扣费失败仅记录日志，暂不阻断（取决于策略，如果是预付费严格校验，应该在网关入口检查余额）
+			// 但这里是 LogRequest，请求已经完成了。
+			s.logger.Error("failed to deduct wallet balance",
+				zap.Int64("userID", log.UserID),
+				zap.String("model", log.Model),
+				zap.Int("tokens", totalTokens),
+				zap.Error(err),
+			)
+		}
+	}
 
 	// 暂时同步写入，在这个阶段确保数据一致性优先
 	if err := s.usageLogRepo.Create(ctx, log); err != nil {

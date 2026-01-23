@@ -16,7 +16,12 @@ import type {
     UpdateProfileRequest,
     ChangePasswordRequest,
     UsageStats,
-    DailyUsage
+    DailyUsage,
+    ModelRate,
+    CreateModelRateRequest,
+    Wallet,
+    WalletTransaction,
+
 } from '@/types'
 
 // ========== Auth API ==========
@@ -35,6 +40,15 @@ export const authApi = {
     register: async (data: RegisterRequest): Promise<ApiResponse<any>> => {
         const res = await apiClient.post<ApiResponse<any>>('/auth/register', data)
         return res.data
+    },
+}
+
+// ========== Model API (User) ==========
+
+export const modelApi = {
+    listAvailable: async (): Promise<string[]> => {
+        const res = await apiClient.get<ApiResponse<string[]>>('/user/models')
+        return res.data.data
     },
 }
 
@@ -67,6 +81,16 @@ export const userApi = {
 
     deleteKey: async (id: number): Promise<void> => {
         await apiClient.delete(`/user/api-keys/${id}`)
+    },
+
+    getWallet: async (): Promise<Wallet> => {
+        const res = await apiClient.get<ApiResponse<Wallet>>('/user/wallet')
+        return res.data.data
+    },
+
+    getTransactions: async (page = 1, size = 20): Promise<{ data: WalletTransaction[], total: number }> => {
+        const res = await apiClient.get<ApiResponse<{ data: WalletTransaction[], total: number }>>(`/user/wallet/transactions?page=${page}&size=${size}`)
+        return res.data.data
     },
 
     getUsage: async (): Promise<UsageStats> => {
@@ -169,6 +193,29 @@ export const loadBalanceApi = {
     },
 }
 
+// ========== Admin API (Model Rates) ==========
+
+export const modelRateApi = {
+    list: async (): Promise<ModelRate[]> => {
+        const res = await apiClient.get<ApiResponse<ModelRate[]>>('/admin/model-rates')
+        return res.data.data
+    },
+
+    create: async (data: CreateModelRateRequest): Promise<ModelRate> => {
+        const res = await apiClient.post<ApiResponse<ModelRate>>('/admin/model-rates', data)
+        return res.data.data
+    },
+
+    update: async (id: number, data: CreateModelRateRequest): Promise<ModelRate> => {
+        const res = await apiClient.put<ApiResponse<ModelRate>>(`/admin/model-rates/${id}`, data)
+        return res.data.data
+    },
+
+    delete: async (id: number): Promise<void> => {
+        await apiClient.delete(`/admin/model-rates/${id}`)
+    },
+}
+
 // ========== Admin API (API Keys) ==========
 
 export const adminApiKeyApi = {
@@ -197,6 +244,10 @@ export const adminUserApi = {
 
     delete: async (id: number): Promise<void> => {
         await apiClient.delete(`/admin/users/${id}`)
+    },
+
+    topUp: async (id: number, amount: number): Promise<void> => {
+        await apiClient.post(`/admin/users/${id}/top-up`, { amount })
     }
 }
 

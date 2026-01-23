@@ -12,10 +12,12 @@ import (
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/loadbalance"
+	"ai-gateway/internal/service/modelrate"
 	"ai-gateway/internal/service/provider"
 	"ai-gateway/internal/service/routingrule"
 	"ai-gateway/internal/service/usage"
 	"ai-gateway/internal/service/user"
+	"ai-gateway/internal/service/wallet"
 )
 
 // AdminHandler 处理管理后台 API 请求。
@@ -27,6 +29,8 @@ type AdminHandler struct {
 	userSvc        user.Service
 	usageSvc       usage.Service
 	gatewaySvc     gateway.GatewayService
+	modelRateSvc   modelrate.Service
+	walletSvc      wallet.Service
 	logger         *zap.Logger
 }
 
@@ -39,6 +43,8 @@ func NewAdminHandler(
 	userSvc user.Service,
 	usageSvc usage.Service,
 	gatewaySvc gateway.GatewayService,
+	modelRateSvc modelrate.Service,
+	walletSvc wallet.Service,
 	logger *zap.Logger,
 ) *AdminHandler {
 	return &AdminHandler{
@@ -49,6 +55,8 @@ func NewAdminHandler(
 		userSvc:        userSvc,
 		usageSvc:       usageSvc,
 		gatewaySvc:     gatewaySvc,
+		modelRateSvc:   modelRateSvc,
+		walletSvc:      walletSvc,
 		logger:         logger.Named("handler.admin"),
 	}
 }
@@ -89,13 +97,14 @@ func (h *AdminHandler) GetProvider(c *gin.Context) {
 
 // CreateProviderRequest 创建提供商的请求体。
 type CreateProviderRequest struct {
-	Name      string `json:"name" binding:"required"`
-	Type      string `json:"type" binding:"required"` // openai, anthropic
-	APIKey    string `json:"apiKey" binding:"required"`
-	BaseURL   string `json:"baseURL" binding:"required"`
-	TimeoutMs int    `json:"timeoutMs"`
-	IsDefault bool   `json:"isDefault"`
-	Enabled   bool   `json:"enabled"`
+	Name      string   `json:"name" binding:"required"`
+	Type      string   `json:"type" binding:"required"` // openai, anthropic
+	APIKey    string   `json:"apiKey" binding:"required"`
+	BaseURL   string   `json:"baseURL" binding:"required"`
+	Models    []string `json:"models"` // Optional list of supported models
+	TimeoutMs int      `json:"timeoutMs"`
+	IsDefault bool     `json:"isDefault"`
+	Enabled   bool     `json:"enabled"`
 }
 
 // CreateProvider 创建新的提供商。
@@ -111,6 +120,7 @@ func (h *AdminHandler) CreateProvider(c *gin.Context) {
 		Type:      req.Type,
 		APIKey:    req.APIKey,
 		BaseURL:   req.BaseURL,
+		Models:    req.Models,
 		TimeoutMs: req.TimeoutMs,
 		IsDefault: req.IsDefault,
 		Enabled:   req.Enabled,
@@ -157,6 +167,7 @@ func (h *AdminHandler) UpdateProvider(c *gin.Context) {
 	provider.Type = req.Type
 	provider.APIKey = req.APIKey
 	provider.BaseURL = req.BaseURL
+	provider.Models = req.Models
 	provider.TimeoutMs = req.TimeoutMs
 	provider.IsDefault = req.IsDefault
 	provider.Enabled = req.Enabled
@@ -578,4 +589,157 @@ func (h *AdminHandler) GetGlobalUsage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": stats})
+}
+
+// --- Mode Rate 管理 API ---
+type CreateModelRateRequest struct {
+	ModelPattern    string  `json:"modelPattern" binding:"required"`
+	PromptPrice     float64 `json:"promptPrice"`
+	CompletionPrice float64 `json:"completionPrice"`
+	Enabled         bool    `json:"enabled"`
+}
+
+// ListModelRates 获取所有模型费率。
+func (h *AdminHandler) ListModelRates(c *gin.Context) {
+	rates, err := h.modelRateSvc.List(c.Request.Context())
+	if err != nil {
+		h.logger.Error("failed to list model rates", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list model rates"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": rates})
+}
+
+// CreateModelRate 创建模型费率。
+func (h *AdminHandler) CreateModelRate(c *gin.Context) {
+	var req CreateModelRateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	rate := &domain.ModelRate{
+		ModelPattern:    req.ModelPattern,
+		PromptPrice:     req.PromptPrice,
+		CompletionPrice: req.CompletionPrice,
+		Enabled:         req.Enabled,
+	}
+
+	if err := h.modelRateSvc.Create(c.Request.Context(), rate); err != nil {
+		h.logger.Error("failed to create model rate", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create model rate"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": rate})
+}
+
+// UpdateModelRate 更新模型费率。
+func (h *AdminHandler) UpdateModelRate(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	rate, err := h.modelRateSvc.GetByID(c.Request.Context(), id)
+	if err != nil {
+		h.logger.Error("failed to get model rate", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get model rate"})
+		return
+	}
+	if rate == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "model rate not found"})
+		return
+	}
+
+	var req CreateModelRateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	rate.ModelPattern = req.ModelPattern
+	rate.PromptPrice = req.PromptPrice
+	rate.CompletionPrice = req.CompletionPrice
+	rate.Enabled = req.Enabled
+
+	if err := h.modelRateSvc.Update(c.Request.Context(), rate); err != nil {
+		h.logger.Error("failed to update model rate", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update model rate"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": rate})
+}
+
+// DeleteModelRate 删除模型费率。
+func (h *AdminHandler) DeleteModelRate(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.modelRateSvc.Delete(c.Request.Context(), id); err != nil {
+		h.logger.Error("failed to delete model rate", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete model rate"})
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
+// --- 钱包管理 API ---
+
+type TopUpRequest struct {
+	Amount float64 `json:"amount" binding:"required,gt=0"`
+}
+
+// TopUpUserWallet 为用户钱包充值。
+func (h *AdminHandler) TopUpUserWallet(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req TopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Assuming 0 or empty string as ReferenceID for now, or get Admin ID from context
+	adminID := "admin" // TODO: get from auth context
+
+	if err := h.walletSvc.TopUp(c.Request.Context(), userID, req.Amount, adminID); err != nil {
+		h.logger.Error("failed to top up wallet", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to top up wallet"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "success"})
+}
+
+// GetUserWallet 获取用户钱包信息。
+func (h *AdminHandler) GetUserWallet(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	wallet, err := h.walletSvc.GetBalance(c.Request.Context(), userID)
+	if err != nil {
+		h.logger.Error("failed to get wallet", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get wallet"})
+		return
+	}
+	// 如果钱包不存在，返回余额0
+	if wallet == nil {
+		wallet = &domain.Wallet{UserID: userID, Balance: 0}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": wallet})
 }

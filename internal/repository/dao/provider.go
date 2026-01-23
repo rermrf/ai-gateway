@@ -15,6 +15,7 @@ type Provider struct {
 	Type      string    `gorm:"size:32;not null"` // openai, anthropic
 	APIKey    string    `gorm:"size:512;not null"`
 	BaseURL   string    `gorm:"size:256;not null"`
+	Models    string    `gorm:"type:text;serializer:json"` // JSON encoded list of models
 	TimeoutMs int       `gorm:"default:60000"`
 	IsDefault bool      `gorm:"default:false"`
 	Enabled   bool      `gorm:"default:true;index"`

@@ -16,20 +16,23 @@ import (
 	"ai-gateway/internal/domain"
 	gatewaysvc "ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/usage"
+	"ai-gateway/internal/service/wallet"
 )
 
 // OpenAIHandler 处理 OpenAI 兼容的 API 请求。
 type OpenAIHandler struct {
 	gw        gatewaysvc.GatewayService
+	walletSvc wallet.Service
 	usageSvc  usage.Service
 	converter *converter.OpenAIConverter
 	logger    *zap.Logger
 }
 
 // NewOpenAIHandler 创建一个新的 OpenAI 处理器。
-func NewOpenAIHandler(gw gatewaysvc.GatewayService, usageSvc usage.Service, logger *zap.Logger) *OpenAIHandler {
+func NewOpenAIHandler(gatewayService gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, logger *zap.Logger) *OpenAIHandler {
 	return &OpenAIHandler{
-		gw:        gw,
+		gw:        gatewayService,
+		walletSvc: walletSvc,
 		usageSvc:  usageSvc,
 		converter: converter.NewOpenAIConverter(),
 		logger:    logger.Named("handler.openai"),
@@ -38,6 +41,38 @@ func NewOpenAIHandler(gw gatewaysvc.GatewayService, usageSvc usage.Service, logg
 
 // ChatCompletions 处理 POST /v1/chat/completions
 func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
+	// 1. Check Balance via Pre-flight
+	// Get user_id from context (set by APIKeyAuth)
+	var userID int64
+	if val, exists := c.Get("user_id"); exists {
+		if id, ok := val.(int64); ok {
+			userID = id
+		}
+	}
+
+	if userID > 0 {
+		hasBalance, err := h.walletSvc.HasBalance(c.Request.Context(), userID)
+		if err != nil {
+			h.logger.Error("failed to check balance", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": gin.H{
+					"message": "Failed to check balance",
+					"type":    "api_error",
+				},
+			})
+			return
+		}
+		if !hasBalance {
+			c.JSON(http.StatusPaymentRequired, gin.H{
+				"error": gin.H{
+					"message": "Insufficient balance. Please top up your wallet.",
+					"type":    "invalid_request_error",
+				},
+			})
+			return
+		}
+	}
+
 	start := time.Now()
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -221,6 +256,7 @@ func (h *OpenAIHandler) logUsage(c *gin.Context, model, provider string, inputTo
 	}
 
 	// 异步记录
+
 	go func() {
 		if err := h.usageSvc.LogRequest(context.Background(), log); err != nil {
 			h.logger.Error("failed to log usage", zap.Error(err))

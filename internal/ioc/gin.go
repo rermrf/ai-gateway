@@ -14,8 +14,10 @@ import (
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/auth"
 	"ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/modelrate"
 	"ai-gateway/internal/service/usage"
 	"ai-gateway/internal/service/user"
+	"ai-gateway/internal/service/wallet"
 )
 
 // InitGinServer 初始化带有所有依赖项的 Gin HTTP 服务器。
@@ -33,6 +35,8 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	loadBalanceDAO := dao.NewGormLoadBalanceDAO(db)
 	userDAO := dao.NewGormUserDAO(db)
 	usageLogDAO := dao.NewGormUsageLogDAO(db)
+	walletDAO := dao.NewGormWalletDAO(db)
+	modelRateDAO := dao.NewGormModelRateDAO(db)
 
 	// 初始化仓库 (Repositories)
 	providerRepo := repository.NewProviderRepository(providerDAO)
@@ -41,6 +45,8 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	loadBalanceRepo := repository.NewLoadBalanceRepository(loadBalanceDAO)
 	userRepo := repository.NewUserRepository(userDAO)
 	usageLogRepo := repository.NewUsageLogRepository(usageLogDAO)
+	walletRepo := repository.NewWalletRepository(walletDAO)
+	modelRateRepo := repository.NewModelRateRepository(modelRateDAO)
 
 	// 初始化认证服务
 	jwtSecret := cfg.Auth.JWTSecret
@@ -52,11 +58,17 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	// 初始化 API Key 服务
 	apiKeySvc := apikey.NewService(apiKeyRepo, logger)
 
+	// 初始化 ModelRate 服务 (UserSvc 之前可能不需要，但 Wallet 需要)
+	modelRateSvc := modelrate.NewService(modelRateRepo, logger)
+
+	// 初始化 Wallet 服务 (依赖 ModelRateSvc)
+	walletSvc := wallet.NewService(walletRepo, modelRateSvc, logger)
+
 	// 初始化用户服务
 	userSvc := user.NewService(userRepo, usageLogRepo, logger)
 
-	// 初始化使用统计服务
-	usageSvc := usage.NewService(usageLogRepo, logger)
+	// 初始化使用统计服务 (依赖 WalletSvc)
+	usageSvc := usage.NewService(usageLogRepo, walletSvc, logger)
 
 	// 使用仓库初始化网关服务
 	gw := gateway.NewGatewayService(
@@ -67,10 +79,10 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	)
 
 	// 初始化处理器
-	openaiHandler := handler.NewOpenAIHandler(gw, usageSvc, logger)
-	anthropicHandler := handler.NewAnthropicHandler(gw, usageSvc, logger)
+	openaiHandler := handler.NewOpenAIHandler(gw, walletSvc, usageSvc, logger)
+	anthropicHandler := handler.NewAnthropicHandler(gw, walletSvc, usageSvc, logger)
 	authHandler := handler.NewAuthHandler(userSvc, authService, logger)
-	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, logger)
+	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, logger)
 	adminHandler := handler.NewAdminHandler(
 		providerRepo,
 		routingRuleRepo,
@@ -79,6 +91,8 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 		userSvc,
 		usageSvc,
 		gw,
+		modelRateSvc,
+		walletSvc,
 		logger,
 	)
 

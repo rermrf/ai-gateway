@@ -116,7 +116,8 @@ func chatStream(messages []Message) (string, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer sk-ad0b8f5b588778a1ce89769ef28ccdc65e8b976b778bad2ada88d1f9bec053c7")
+	// req.Header.Set("Authorization", "Bearer sk-ad0b8f5b588778a1ce89769ef28ccdc65e8b976b778bad2ada88d1f9bec053c7")
+	req.Header.Set("Authorization", "Bearer sk-153e04ec51d4fe3ac8448cb4996ed69493b553e829ac4ee305225581ec80a799")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

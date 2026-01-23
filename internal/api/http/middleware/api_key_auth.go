@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -85,7 +86,7 @@ func APIKeyAuth(apiKeyService apikey.Service, logger *zap.Logger) gin.HandlerFun
 		// 异步记录使用情况（不阻塞请求）
 		go func() {
 			// 使用新的 context，因为原始请求可能已完成
-			if err := apiKeyService.RecordUsage(c.Request.Context(), apiKey.ID); err != nil {
+			if err := apiKeyService.RecordUsage(context.Background(), apiKey.ID); err != nil {
 				logger.Error("failed to record API key usage",
 					zap.Error(err),
 					zap.Int64("key_id", apiKey.ID),

@@ -16,6 +16,7 @@ export function Providers() {
         type: 'openai',
         apiKey: '',
         baseURL: '',
+        models: [],
         timeoutMs: 60000,
         isDefault: false,
         enabled: true,
@@ -58,6 +59,7 @@ export function Providers() {
             type: 'openai',
             apiKey: '',
             baseURL: '',
+            models: [],
             timeoutMs: 60000,
             isDefault: false,
             enabled: true,
@@ -71,6 +73,7 @@ export function Providers() {
             type: provider.type,
             apiKey: provider.apiKey,
             baseURL: provider.baseURL,
+            models: provider.models || [],
             timeoutMs: provider.timeoutMs,
             isDefault: provider.isDefault,
             enabled: provider.enabled,
@@ -136,12 +139,22 @@ export function Providers() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium">Base URL</label>
                                     <Input
                                         value={formData.baseURL}
                                         onChange={(e) => setFormData({ ...formData, baseURL: e.target.value })}
                                         placeholder="https://api.openai.com/v1"
                                         required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium">支持的模型 (逗号分隔)</label>
+                                    <Input
+                                        value={formData.models?.join(', ') || ''}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            models: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                                        })}
+                                        placeholder="gpt-4, gpt-3.5-turbo"
                                     />
                                 </div>
                                 <div>

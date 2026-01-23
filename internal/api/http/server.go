@@ -100,6 +100,13 @@ func registerRoutes(
 		// 使用统计
 		userGroup.GET("/usage", userHandler.GetMyUsage)
 		userGroup.GET("/usage/daily", userHandler.GetMyDailyUsage)
+
+		// 个人钱包
+		userGroup.GET("/wallet", userHandler.GetMyWallet)
+		userGroup.GET("/wallet/transactions", userHandler.GetMyTransactions)
+
+		// 可用模型
+		userGroup.GET("/models", userHandler.ListAvailableModels)
 	}
 
 	// OpenAI 兼容 API（使用数据库 API Key 认证）
@@ -136,6 +143,16 @@ func registerRoutes(
 		adminGroup.POST("/load-balance-groups", adminHandler.CreateLoadBalanceGroup)
 		adminGroup.PUT("/load-balance-groups/:id", adminHandler.UpdateLoadBalanceGroup)
 		adminGroup.DELETE("/load-balance-groups/:id", adminHandler.DeleteLoadBalanceGroup)
+
+		// 模型费率管理
+		adminGroup.GET("/model-rates", adminHandler.ListModelRates)
+		adminGroup.POST("/model-rates", adminHandler.CreateModelRate)
+		adminGroup.PUT("/model-rates/:id", adminHandler.UpdateModelRate)
+		adminGroup.DELETE("/model-rates/:id", adminHandler.DeleteModelRate)
+
+		// 钱包管理 (管理员充值)
+		adminGroup.POST("/users/:id/top-up", adminHandler.TopUpUserWallet)
+		adminGroup.GET("/users/:id/wallet", adminHandler.GetUserWallet)
 
 		// API Key 管理（全局）
 		adminGroup.GET("/api-keys", adminHandler.ListAPIKeys)

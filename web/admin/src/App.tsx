@@ -6,6 +6,7 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Providers } from '@/pages/Providers'
 import { RoutingRules } from '@/pages/RoutingRules'
 import { LoadBalance } from '@/pages/LoadBalance'
+import { ModelRates } from '@/pages/ModelRates'
 import { ApiKeys } from '@/pages/ApiKeys'
 import { Settings } from '@/pages/Settings'
 import { Login } from '@/pages/Login'
@@ -78,6 +79,14 @@ function App() {
               <RequireAuth roles={['admin']}>
                 <Layout>
                   <LoadBalance />
+                </Layout>
+              </RequireAuth>
+            } />
+
+            <Route path="/model-rates" element={
+              <RequireAuth roles={['admin']}>
+                <Layout>
+                  <ModelRates />
                 </Layout>
               </RequireAuth>
             } />

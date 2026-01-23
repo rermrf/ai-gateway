@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { dashboardApi, userApi } from '@/api'
+import { dashboardApi, userApi, modelApi } from '@/api'
 import { Users, Key, Activity, DollarSign, Database } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -143,6 +143,64 @@ export function Dashboard() {
                     </p>
                 </CardContent>
             </Card>
+
+            {/* 用户可用模型列表 (仅限普通用户) */}
+            {!isAdmin && (
+                <AvailableModels />
+            )}
         </div>
     )
 }
+
+function AvailableModels() {
+    const { data: models, isLoading, error } = useQuery({
+        queryKey: ['available-models'],
+        queryFn: modelApi.listAvailable,
+    })
+
+    const { data: wallet } = useQuery({
+        queryKey: ['my-wallet'],
+        queryFn: userApi.getWallet,
+    })
+
+    if (isLoading) return <div className="text-muted-foreground">加载模型中...</div>
+    if (error) return <div className="text-red-500">加载模型失败</div>
+
+    return (
+        <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-green-600" />
+                        当前余额
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-3xl font-bold text-green-700">
+                        ${wallet?.balance?.toFixed(4) || '0.0000'}
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Database className="h-5 w-5 text-blue-600" />
+                        可用模型列表
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                        {models?.map(model => (
+                            <div key={model} className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
+                                {model}
+                            </div>
+                        ))}
+                        {!models?.length && <div className="text-muted-foreground">暂无可用模型</div>}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+

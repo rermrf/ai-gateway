@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/repository/dao"
@@ -32,12 +33,14 @@ func NewProviderRepository(providerDAO dao.ProviderDAO) ProviderRepository {
 
 // toDAO 将 domain.Provider 转换为 dao.Provider
 func (r *providerRepository) toDAO(p *domain.Provider) *dao.Provider {
+	modelsJSON, _ := json.Marshal(p.Models)
 	return &dao.Provider{
 		ID:        p.ID,
 		Name:      p.Name,
 		Type:      p.Type,
 		APIKey:    p.APIKey,
 		BaseURL:   p.BaseURL,
+		Models:    string(modelsJSON),
 		TimeoutMs: p.TimeoutMs,
 		IsDefault: p.IsDefault,
 		Enabled:   p.Enabled,
@@ -51,12 +54,17 @@ func (r *providerRepository) toDomain(p *dao.Provider) *domain.Provider {
 	if p == nil {
 		return nil
 	}
+	var models []string
+	if p.Models != "" {
+		_ = json.Unmarshal([]byte(p.Models), &models)
+	}
 	return &domain.Provider{
 		ID:        p.ID,
 		Name:      p.Name,
 		Type:      p.Type,
 		APIKey:    p.APIKey,
 		BaseURL:   p.BaseURL,
+		Models:    models,
 		TimeoutMs: p.TimeoutMs,
 		IsDefault: p.IsDefault,
 		Enabled:   p.Enabled,

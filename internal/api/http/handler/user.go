@@ -11,24 +11,44 @@ import (
 	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/service/apikey"
+	"ai-gateway/internal/service/gateway" // Added import
 	"ai-gateway/internal/service/user"
+	"ai-gateway/internal/service/wallet"
 )
 
 // UserHandler 处理用户自助服务 API 请求。
 type UserHandler struct {
 	svc       user.Service
 	apiKeySvc apikey.Service
+	walletSvc wallet.Service
+	gw        gateway.GatewayService // Injected GatewayService
 	logger    *zap.Logger
 }
 
 // NewUserHandler 创建一个新的 UserHandler。
-func NewUserHandler(svc user.Service, apiKeySvc apikey.Service, logger *zap.Logger) *UserHandler {
+func NewUserHandler(svc user.Service, apiKeySvc apikey.Service, walletSvc wallet.Service, gw gateway.GatewayService, logger *zap.Logger) *UserHandler {
 	return &UserHandler{
 		svc:       svc,
 		apiKeySvc: apiKeySvc,
+		walletSvc: walletSvc,
+		gw:        gw,
 		logger:    logger.Named("handler.user"),
 	}
 }
+
+// ... existing methods ...
+
+// ListAvailableModels 获取可用模型列表。
+func (h *UserHandler) ListAvailableModels(c *gin.Context) {
+	models, err := h.gw.ListModels(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": models})
+}
+
+// ... existing methods ...
 
 // GetProfile 获取当前用户信息。
 func (h *UserHandler) GetProfile(c *gin.Context) {
@@ -139,6 +159,43 @@ func (h *UserHandler) DeleteMyAPIKey(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// --- 钱包管理 ---
+
+// GetMyWallet 获取当前用户钱包信息。
+func (h *UserHandler) GetMyWallet(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	wallet, err := h.walletSvc.GetBalance(c.Request.Context(), userID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	// 如果钱包不存在，返回余额0
+	if wallet == nil {
+		wallet = &domain.Wallet{UserID: userID, Balance: 0}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": wallet})
+}
+
+// GetMyTransactions 获取当前用户交易记录。
+func (h *UserHandler) GetMyTransactions(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+
+	txs, total, err := h.walletSvc.GetTransactions(c.Request.Context(), userID, page, size)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  txs,
+		"total": total,
+		"page":  page,
+		"size":  size,
+	})
 }
 
 // --- 使用统计 ---

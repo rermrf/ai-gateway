@@ -15,20 +15,23 @@ import (
 	"ai-gateway/internal/domain"
 	gatewaysvc "ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/usage"
+	"ai-gateway/internal/service/wallet"
 )
 
 // AnthropicHandler 处理 Anthropic 兼容的 API 请求。
 type AnthropicHandler struct {
 	gw        gatewaysvc.GatewayService
+	walletSvc wallet.Service
 	usageSvc  usage.Service
 	converter *converter.AnthropicConverter
 	logger    *zap.Logger
 }
 
 // NewAnthropicHandler 创建一个新的 Anthropic 处理器。
-func NewAnthropicHandler(gw gatewaysvc.GatewayService, usageSvc usage.Service, logger *zap.Logger) *AnthropicHandler {
+func NewAnthropicHandler(gw gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, logger *zap.Logger) *AnthropicHandler {
 	return &AnthropicHandler{
 		gw:        gw,
+		walletSvc: walletSvc,
 		usageSvc:  usageSvc,
 		converter: converter.NewAnthropicConverter(),
 		logger:    logger.Named("handler.anthropic"),
@@ -37,6 +40,35 @@ func NewAnthropicHandler(gw gatewaysvc.GatewayService, usageSvc usage.Service, l
 
 // Messages 处理 POST /v1/messages
 func (h *AnthropicHandler) Messages(c *gin.Context) {
+	// 1. 鉴权 (JWT Metadata)
+	userID := ctxGetInt64(c, "user_id") // Use correct key from APIKeyAuth
+
+	// 检查余额
+	if userID > 0 {
+		hasBalance, err := h.walletSvc.HasBalance(c.Request.Context(), userID)
+		if err != nil {
+			h.logger.Error("failed to check balance", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "api_error",
+					"message": "Failed to check balance",
+				},
+			})
+			return
+		}
+		if !hasBalance {
+			c.JSON(http.StatusPaymentRequired, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "invalid_request_error",
+					"message": "Insufficient balance. Please top up your wallet.",
+				},
+			})
+			return
+		}
+	}
+
 	start := time.Now()
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -255,4 +287,15 @@ func (h *AnthropicHandler) logUsage(c *gin.Context, model, provider string, inpu
 			h.logger.Error("failed to log usage", zap.Error(err))
 		}
 	}()
+}
+
+func ctxGetInt64(c *gin.Context, key string) int64 {
+	val, exists := c.Get(key)
+	if !exists {
+		return 0
+	}
+	if id, ok := val.(int64); ok {
+		return id
+	}
+	return 0
 }

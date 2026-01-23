@@ -3,20 +3,40 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminUserApi } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, Edit2, Check, X } from 'lucide-react'
+import { Trash2, Edit2, Check, X, Coins } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+// import { useToast } from '@/hooks/use-toast'
 
-// Since Select component might also be missing, I'll use standard select if needed, 
-// but assuming Shadcn Select might be there or I should check.
-// Checking components dir: I only saw button, card, input.
-// I will just use standard HTML select to be safe and save tool calls.
+// Simple Modal Component
+function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+    if (!isOpen) return null
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 relative">
+                <h3 className="text-lg font-semibold mb-4">{title}</h3>
+                {children}
+                <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-700">
+                    ✕
+                </button>
+            </div>
+        </div>
+    )
+}
 
 export function Users() {
     const queryClient = useQueryClient()
+    // const { toast } = useToast()
+    const toast = (opts: any) => console.log('Toast:', opts)
     const [editingUser, setEditingUser] = useState<number | null>(null)
     const [editForm, setEditForm] = useState({
         role: '',
         status: ''
     })
+
+    // Top-up State
+    const [topUpUser, setTopUpUser] = useState<any | null>(null)
+    const [topUpAmount, setTopUpAmount] = useState('10.0')
 
     const { data: users, isLoading } = useQuery({
         queryKey: ['users'],
@@ -29,6 +49,7 @@ export function Users() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] })
             setEditingUser(null)
+            toast({ title: '更新成功', description: '用户信息已更新' })
         },
     })
 
@@ -36,6 +57,23 @@ export function Users() {
         mutationFn: adminUserApi.delete,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] })
+            toast({ title: '删除成功', description: '用户已删除' })
+        },
+    })
+
+    const topUpMutation = useMutation({
+        mutationFn: (data: { id: number, amount: number }) =>
+            adminUserApi.topUp(data.id, data.amount),
+        onSuccess: () => {
+            setTopUpUser(null)
+            toast({ title: '充值成功', description: '用户余额已更新' })
+        },
+        onError: (error: any) => {
+            toast({
+                variant: 'destructive',
+                title: '充值失败',
+                description: error.response?.data?.error || '未知错误',
+            })
         },
     })
 
@@ -49,6 +87,15 @@ export function Users() {
             id,
             role: editForm.role,
             status: editForm.status
+        })
+    }
+
+    const handleTopUpSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!topUpUser) return
+        topUpMutation.mutate({
+            id: topUpUser.id,
+            amount: parseFloat(topUpAmount)
         })
     }
 
@@ -134,9 +181,19 @@ export function Users() {
                                                             </Button>
                                                         </>
                                                     ) : (
-                                                        <Button size="sm" variant="ghost" onClick={() => handleEdit(user)}>
-                                                            <Edit2 className="h-4 w-4 text-blue-600" />
-                                                        </Button>
+                                                        <>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => setTopUpUser(user)}
+                                                                title="充值"
+                                                            >
+                                                                <Coins className="h-4 w-4 text-yellow-600" />
+                                                            </Button>
+                                                            <Button size="sm" variant="ghost" onClick={() => handleEdit(user)}>
+                                                                <Edit2 className="h-4 w-4 text-blue-600" />
+                                                            </Button>
+                                                        </>
                                                     )}
 
                                                     {user.id !== 1 && ( // Prevent deleting first admin
@@ -162,6 +219,34 @@ export function Users() {
                     )}
                 </CardContent>
             </Card>
+
+            <Modal isOpen={!!topUpUser} onClose={() => setTopUpUser(null)} title={`用户充值 - ${topUpUser?.username}`}>
+                <form onSubmit={handleTopUpSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="amount">充值金额 ($)</Label>
+                        <Input
+                            id="amount"
+                            type="number"
+                            step="0.01"
+                            value={topUpAmount}
+                            onChange={(e) => setTopUpAmount(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setTopUpUser(null)}
+                        >
+                            取消
+                        </Button>
+                        <Button type="submit" disabled={topUpMutation.isPending}>
+                            {topUpMutation.isPending ? '充值中...' : '确认充值'}
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
         </div>
     )
 }
