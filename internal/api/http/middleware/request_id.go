@@ -1,4 +1,4 @@
-// Package middleware provides HTTP middleware for the AI Gateway.
+// Package middleware 提供 AI 网关的 HTTP 中间件。
 package middleware
 
 import (
@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// RequestID adds a unique request ID to each request.
+// RequestID 为每个请求添加唯一的请求 ID。
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID := c.GetHeader("X-Request-ID")

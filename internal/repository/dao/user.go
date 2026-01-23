@@ -20,8 +20,9 @@ const (
 type UserStatus string
 
 const (
-	UserStatusActive   UserStatus = "active"
-	UserStatusDisabled UserStatus = "disabled"
+	UserStatusActive   UserStatus = "active"   // 激活
+	UserStatusPending  UserStatus = "pending"  // 待审核
+	UserStatusDisabled UserStatus = "disabled" // 禁用
 )
 
 // User 是用户的数据库模型。

@@ -149,14 +149,4 @@ func (h *AuthHandler) handleError(c *gin.Context, err error) {
 	}
 }
 
-// toUserResponse 辅助函数用于转换用户响应（如果需要）。
-func (h *AuthHandler) toUserResponse(u *domain.User) map[string]interface{} {
-	return map[string]interface{}{
-		"id":        u.ID,
-		"username":  u.Username,
-		"email":     u.Email,
-		"role":      u.Role.String(),
-		"status":    u.Status.String(),
-		"createdAt": u.CreatedAt.UnixMilli(),
-	}
-}
+

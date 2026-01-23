@@ -1,11 +1,11 @@
-// Package middleware provides HTTP middleware for the AI Gateway.
+// Package middleware 提供 AI 网关的 HTTP 中间件。
 package middleware
 
 import (
 	"github.com/gin-gonic/gin"
 )
 
-// Cors returns a CORS middleware.
+// Cors 返回跨域资源共享 (CORS) 中间件。
 func Cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")

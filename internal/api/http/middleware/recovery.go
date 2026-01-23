@@ -1,4 +1,4 @@
-// Package middleware provides HTTP middleware for the AI Gateway.
+// Package middleware 提供 AI 网关的 HTTP 中间件。
 package middleware
 
 import (
@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Recovery returns a panic recovery middleware.
+// Recovery 返回 panic 恢复中间件。
 func Recovery(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

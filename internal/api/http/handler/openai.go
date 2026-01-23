@@ -2,7 +2,6 @@
 package handler
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -294,5 +293,3 @@ func (h *OpenAIHandler) ListModels(c *gin.Context) {
 	})
 }
 
-// Ensure io.Writer interface for SSE streaming
-var _ io.Writer = (*bufio.Writer)(nil)

@@ -1,4 +1,4 @@
-// Package logger provides a Zap-based logger for the AI Gateway.
+// Package logger 提供基于 Zap 的 AI 网关日志服务。
 package logger
 
 import (
@@ -10,7 +10,7 @@ import (
 
 var globalLogger *zap.Logger
 
-// InitLogger initializes the global logger with the specified configuration.
+// InitLogger 根据指定配置初始化全局日志记录器。
 func InitLogger(level string, jsonFormat bool) *zap.Logger {
 	var zapLevel zapcore.Level
 	switch level {
@@ -58,7 +58,7 @@ func InitLogger(level string, jsonFormat bool) *zap.Logger {
 	return globalLogger
 }
 
-// L returns the global logger. If not initialized, returns a development logger.
+// L 返回全局日志记录器。如果未初始化，则返回开发模式日志记录器。
 func L() *zap.Logger {
 	if globalLogger == nil {
 		globalLogger, _ = zap.NewDevelopment()
@@ -66,7 +66,7 @@ func L() *zap.Logger {
 	return globalLogger
 }
 
-// S returns the global SugaredLogger.
+// S 返回全局 SugaredLogger。
 func S() *zap.SugaredLogger {
 	return L().Sugar()
 }

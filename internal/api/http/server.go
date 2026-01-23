@@ -207,7 +207,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }
 
-// Engine returns the Gin engine (for testing).
+// Engine 返回 Gin 引擎（用于测试）。
 func (s *Server) Engine() *gin.Engine {
 	return s.engine
 }

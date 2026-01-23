@@ -14,7 +14,10 @@ import (
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/auth"
 	"ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/loadbalance"
 	"ai-gateway/internal/service/modelrate"
+	"ai-gateway/internal/service/provider"
+	"ai-gateway/internal/service/routingrule"
 	"ai-gateway/internal/service/usage"
 	"ai-gateway/internal/service/user"
 	"ai-gateway/internal/service/wallet"
@@ -70,6 +73,11 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	// 初始化使用统计服务 (依赖 WalletSvc)
 	usageSvc := usage.NewService(usageLogRepo, walletSvc, logger)
 
+	// 初始化管理服务 (Admin Services)
+	providerSvc := provider.NewService(providerRepo, logger)
+	routingRuleSvc := routingrule.NewService(routingRuleRepo, logger)
+	loadBalanceSvc := loadbalance.NewService(loadBalanceRepo, logger)
+
 	// 使用仓库初始化网关服务
 	gw := gateway.NewGatewayService(
 		providerRepo,
@@ -84,9 +92,9 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	authHandler := handler.NewAuthHandler(userSvc, authService, logger)
 	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, modelRateSvc, logger)
 	adminHandler := handler.NewAdminHandler(
-		providerRepo,
-		routingRuleRepo,
-		loadBalanceRepo,
+		providerSvc,
+		routingRuleSvc,
+		loadBalanceSvc,
 		apiKeySvc,
 		userSvc,
 		usageSvc,

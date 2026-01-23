@@ -22,6 +22,8 @@ import (
 )
 
 // GatewayService 定义了网关操作的接口。
+//
+//go:generate mockgen -source=./gateway.go -destination=./mocks/gateway.mock.go -package=gatewaymocks -typed GatewayService
 type GatewayService interface {
 	Chat(ctx context.Context, req *domain.ChatRequest) (*domain.ChatResponse, error)
 	ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, string, error)

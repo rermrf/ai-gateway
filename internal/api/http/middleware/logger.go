@@ -1,4 +1,4 @@
-// Package middleware provides HTTP middleware for the AI Gateway.
+// Package middleware 提供 AI 网关的 HTTP 中间件。
 package middleware
 
 import (
@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Logger returns a logging middleware using Zap.
+// Logger 返回基于 Zap 的日志中间件。
 func Logger(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()

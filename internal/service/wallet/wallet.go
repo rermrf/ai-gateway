@@ -3,6 +3,8 @@ package wallet
 import (
 	"context"
 	"errors"
+
+	"gorm.io/gorm"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -55,7 +57,7 @@ func NewService(
 func (s *service) GetBalance(ctx context.Context, userID int64) (*domain.Wallet, error) {
 	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
 	if err != nil {
-		if err.Error() == "record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -66,7 +68,7 @@ func (s *service) GetBalance(ctx context.Context, userID int64) (*domain.Wallet,
 func (s *service) GetTransactions(ctx context.Context, userID int64, page, size int) ([]domain.WalletTransaction, int64, error) {
 	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
 	if err != nil {
-		if err.Error() == "record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return []domain.WalletTransaction{}, 0, nil
 		}
 		return nil, 0, err
@@ -184,7 +186,7 @@ func (s *service) Deduct(ctx context.Context, userID int64, inputTokens, outputT
 func (s *service) HasBalance(ctx context.Context, userID int64) (bool, error) {
 	wallet, err := s.walletRepo.GetByUserID(ctx, userID)
 	if err != nil {
-		if err.Error() == "record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
 		}
 		return false, err

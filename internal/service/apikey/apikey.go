@@ -29,6 +29,8 @@ var (
 )
 
 // Service API Key 服务接口。
+//
+//go:generate mockgen -source=./apikey.go -destination=./mocks/apikey.mock.go -package=apikeymocks -typed Service
 type Service interface {
 	// ValidateAPIKey 验证 API key 并返回用户信息
 	ValidateAPIKey(ctx context.Context, key string) (*domain.APIKey, error)
