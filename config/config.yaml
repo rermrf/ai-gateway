@@ -18,11 +18,15 @@ http:
 
 # MySQL 数据库（必填）
 # 所有供应商、路由规则和负载均衡配置都存储在数据库中
+# 敏感信息建议通过环境变量设置：
+#   export DB_HOST="your-host"
+#   export DB_PASSWORD="your-password"
+#   export JWT_SECRET="your-jwt-secret"
 mysql:
   host: "rermrf.icu"
   port: 3306
   user: "root"
-  password: "wen123..."
+  password: ""  # 建议使用环境变量 DB_PASSWORD
   database: "ai_gateway"
   charset: "utf8mb4"
   maxIdle: 10
@@ -31,9 +35,7 @@ mysql:
 # 身份验证
 auth:
   enabled: true
-  apiKeys:
-    - "sk-gateway-test-key"
-    - "sk-gateway-production"
+  # 注意：API Keys 现在在数据库中管理，使用 Admin API 或直接操作数据库
 
 # ========================================
 # 注意：供应商、路由和负载均衡现在在 MySQL 中管理

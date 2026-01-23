@@ -11,28 +11,38 @@ import (
 	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/service/apikey"
-	"ai-gateway/internal/service/gateway" // Added import
+	"ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/modelrate"
 	"ai-gateway/internal/service/user"
 	"ai-gateway/internal/service/wallet"
 )
 
 // UserHandler 处理用户自助服务 API 请求。
 type UserHandler struct {
-	svc       user.Service
-	apiKeySvc apikey.Service
-	walletSvc wallet.Service
-	gw        gateway.GatewayService // Injected GatewayService
-	logger    *zap.Logger
+	svc          user.Service
+	apiKeySvc    apikey.Service
+	walletSvc    wallet.Service
+	gw           gateway.GatewayService
+	modelRateSvc modelrate.Service
+	logger       *zap.Logger
 }
 
 // NewUserHandler 创建一个新的 UserHandler。
-func NewUserHandler(svc user.Service, apiKeySvc apikey.Service, walletSvc wallet.Service, gw gateway.GatewayService, logger *zap.Logger) *UserHandler {
+func NewUserHandler(
+	svc user.Service,
+	apiKeySvc apikey.Service,
+	walletSvc wallet.Service,
+	gw gateway.GatewayService,
+	modelRateSvc modelrate.Service,
+	logger *zap.Logger,
+) *UserHandler {
 	return &UserHandler{
-		svc:       svc,
-		apiKeySvc: apiKeySvc,
-		walletSvc: walletSvc,
-		gw:        gw,
-		logger:    logger.Named("handler.user"),
+		svc:          svc,
+		apiKeySvc:    apiKeySvc,
+		walletSvc:    walletSvc,
+		gw:           gw,
+		modelRateSvc: modelRateSvc,
+		logger:       logger.Named("handler.user"),
 	}
 }
 
@@ -46,6 +56,44 @@ func (h *UserHandler) ListAvailableModels(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": models})
+}
+
+// ModelWithPricing 模型及定价信息。
+type ModelWithPricing struct {
+	ModelName       string  `json:"modelName"`       // 模型名称
+	PromptPrice     float64 `json:"promptPrice"`     // 输入价格（每 1M tokens）
+	CompletionPrice float64 `json:"completionPrice"` // 输出价格（每 1M tokens）
+}
+
+// ListModelsWithPricing 获取带价格信息的模型列表。
+func (h *UserHandler) ListModelsWithPricing(c *gin.Context) {
+	// 1. 获取所有可用模型
+	models, err := h.gw.ListModels(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	// 2. 为每个模型匹配价格
+	result := make([]ModelWithPricing, 0, len(models))
+	for _, model := range models {
+		// 获取模型对应的费率
+		promptPrice, completionPrice, err := h.modelRateSvc.GetRateForModel(c.Request.Context(), model)
+		if err != nil {
+			h.logger.Warn("failed to get rate for model",
+				zap.String("model", model),
+				zap.Error(err))
+			// 继续处理，使用默认价格 0
+		}
+
+		result = append(result, ModelWithPricing{
+			ModelName:       model,
+			PromptPrice:     promptPrice,
+			CompletionPrice: completionPrice,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
 // ... existing methods ...

@@ -21,6 +21,7 @@ import type {
     CreateModelRateRequest,
     Wallet,
     WalletTransaction,
+    ModelWithPricing,
 
 } from '@/types'
 
@@ -48,6 +49,11 @@ export const authApi = {
 export const modelApi = {
     listAvailable: async (): Promise<string[]> => {
         const res = await apiClient.get<ApiResponse<string[]>>('/user/models')
+        return res.data.data
+    },
+
+    listWithPricing: async (): Promise<ModelWithPricing[]> => {
+        const res = await apiClient.get<ApiResponse<ModelWithPricing[]>>('/user/models-with-pricing')
         return res.data.data
     },
 }

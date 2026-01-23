@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { userApi } from '@/api'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ModelPricingList } from '@/components/ModelPricingList'
 
 export function Settings() {
     const { user, updateUser } = useAuth()
@@ -29,6 +30,12 @@ export function Settings() {
                     修改密码
                 </button>
                 <button
+                    className={`px-4 py-2 border-b-2 ${activeTab === 'models' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                    onClick={() => setActiveTab('models')}
+                >
+                    模型及费率
+                </button>
+                <button
                     className={`px-4 py-2 border-b-2 ${activeTab === 'about' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
                     onClick={() => setActiveTab('about')}
                 >
@@ -38,6 +45,7 @@ export function Settings() {
 
             {activeTab === 'profile' && <ProfileSettings user={user} updateUser={updateUser} />}
             {activeTab === 'password' && <PasswordSettings />}
+            {activeTab === 'models' && <ModelPricingList />}
             {activeTab === 'about' && <AboutSection />}
         </div>
     )

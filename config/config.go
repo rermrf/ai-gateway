@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -97,9 +98,9 @@ type LoadBalanceMember struct {
 
 // AuthConfig 包含身份验证设置。
 type AuthConfig struct {
-	Enabled   bool     `yaml:"enabled"`
-	APIKeys   []string `yaml:"apiKeys"`
-	JWTSecret string   `yaml:"jwtSecret"`
+	Enabled   bool   `yaml:"enabled"`
+	JWTSecret string `yaml:"jwtSecret"`
+	// 注意：API Keys 现在在数据库中管理，不再从配置文件读取
 }
 
 // Load 从 YAML 文件读取配置。
@@ -113,6 +114,9 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+
+	// 环境变量覆盖（优先级高于配置文件）
+	overrideFromEnv(&cfg)
 
 	// 设置默认值
 	if cfg.HTTP.Addr == "" {
@@ -154,6 +158,42 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// overrideFromEnv 从环境变量覆盖配置。
+// 支持的环境变量：
+//   - DB_HOST: 数据库主机
+//   - DB_PORT: 数据库端口
+//   - DB_USER: 数据库用户
+//   - DB_PASSWORD: 数据库密码
+//   - DB_NAME: 数据库名称
+//   - JWT_SECRET: JWT 密钥
+func overrideFromEnv(cfg *Config) {
+	// 数据库配置
+	if v := os.Getenv("DB_HOST"); v != "" {
+		cfg.MySQL.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		// 简单的端口号转换，生产环境应该有更完善的错误处理
+		var port int
+		if _, err := fmt.Sscanf(v, "%d", &port); err == nil {
+			cfg.MySQL.Port = port
+		}
+	}
+	if v := os.Getenv("DB_USER"); v != "" {
+		cfg.MySQL.User = v
+	}
+	if v := os.Getenv("DB_PASSWORD"); v != "" {
+		cfg.MySQL.Password = v
+	}
+	if v := os.Getenv("DB_NAME"); v != "" {
+		cfg.MySQL.Database = v
+	}
+
+	// JWT 密钥
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
 }
 
 // DefaultConfig 为开发环境返回默认配置。

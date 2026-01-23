@@ -1,5 +1,34 @@
-.DS_Store
-bin/
-*.log
-/run
+# 环境变量配置文件
+# 此文件包含敏感信息，不应提交到版本控制
+.env
 
+# 构建产物
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 测试缓存
+*.test
+*.out
+
+# 依赖工具
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Mac
+.DS_Store
+
+# 日志文件
+*.log
+
+# 临时文件
+tmp/
+temp/

@@ -165,6 +165,12 @@ export interface CreateModelRateRequest {
     enabled: boolean
 }
 
+export interface ModelWithPricing {
+    modelName: string
+    promptPrice: number
+    completionPrice: number
+}
+
 // ========== Wallet ==========
 
 export interface Wallet {

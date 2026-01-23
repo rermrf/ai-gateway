@@ -107,6 +107,7 @@ func registerRoutes(
 
 		// 可用模型
 		userGroup.GET("/models", userHandler.ListAvailableModels)
+		userGroup.GET("/models-with-pricing", userHandler.ListModelsWithPricing)
 	}
 
 	// OpenAI 兼容 API（使用数据库 API Key 认证）

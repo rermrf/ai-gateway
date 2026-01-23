@@ -50,11 +50,28 @@ func NewGormProviderDAO(db *gorm.DB) ProviderDAO {
 }
 
 func (d *GormProviderDAO) Create(ctx context.Context, p *Provider) error {
-	return d.db.WithContext(ctx).Create(p).Error
+	return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if p.IsDefault {
+			// Unset other defaults for this type
+			if err := tx.Model(&Provider{}).Where("type = ? AND is_default = ?", p.Type, true).Update("is_default", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Create(p).Error
+	})
 }
 
 func (d *GormProviderDAO) Update(ctx context.Context, p *Provider) error {
-	return d.db.WithContext(ctx).Save(p).Error
+	return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if p.IsDefault {
+			// Unset other defaults for this type
+			// We exclude the current ID to avoid redundant update, though not strictly necessary as Save will overwrite
+			if err := tx.Model(&Provider{}).Where("type = ? AND is_default = ? AND id != ?", p.Type, true, p.ID).Update("is_default", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Save(p).Error
+	})
 }
 
 func (d *GormProviderDAO) Delete(ctx context.Context, id int64) error {

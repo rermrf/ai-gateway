@@ -82,7 +82,7 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	openaiHandler := handler.NewOpenAIHandler(gw, walletSvc, usageSvc, logger)
 	anthropicHandler := handler.NewAnthropicHandler(gw, walletSvc, usageSvc, logger)
 	authHandler := handler.NewAuthHandler(userSvc, authService, logger)
-	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, logger)
+	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, modelRateSvc, logger)
 	adminHandler := handler.NewAdminHandler(
 		providerRepo,
 		routingRuleRepo,
