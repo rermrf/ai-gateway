@@ -45,3 +45,16 @@ auth:
 # - INSERT INTO load_balance_groups (name, model_pattern, strategy, enabled)
 # - INSERT INTO load_balance_members (group_id, provider_name, weight, priority)
 # ========================================
+
+# Redis 配置 (可选，启用限流时必填)
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+# 限流配置 (需要 Redis)
+rateLimit:
+  enabled: false # 默认关闭，修改为 true 以启用
+  rate: 60       # 窗口内允许请求数
+  window: 1m     # 窗口大小 (1m, 1h 等)
+

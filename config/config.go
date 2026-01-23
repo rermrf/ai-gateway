@@ -15,7 +15,9 @@ type Config struct {
 	Log       LogConfig        `yaml:"log"`
 	HTTP      HTTPConfig       `yaml:"http"`
 	MySQL     MySQLConfig      `yaml:"mysql"`
+	Redis     RedisConfig      `yaml:"redis"`
 	Auth      AuthConfig       `yaml:"auth"`
+	RateLimit RateLimitConfig  `yaml:"rateLimit"`
 	Providers []ProviderConfig `yaml:"providers"`
 	Models    ModelsConfig     `yaml:"models"`
 }
@@ -49,6 +51,20 @@ type MySQLConfig struct {
 	Charset  string `yaml:"charset"`
 	MaxIdle  int    `yaml:"maxIdle"`
 	MaxOpen  int    `yaml:"maxOpen"`
+}
+
+// RedisConfig 包含 Redis 设置。
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+}
+
+// RateLimitConfig 包含限流设置。
+type RateLimitConfig struct {
+	Enabled bool          `yaml:"enabled"`
+	Rate    int           `yaml:"rate"`   // 窗口内允许请求数
+	Window  time.Duration `yaml:"window"` // 窗口大小
 }
 
 // ProviderConfig 包含单个供应商实例的设置。
@@ -194,6 +210,14 @@ func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
 	}
+
+	// Redis 覆盖
+	if v := os.Getenv("REDIS_ADDR"); v != "" {
+		cfg.Redis.Addr = v
+	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
 }
 
 // DefaultConfig 为开发环境返回默认配置。
@@ -217,6 +241,15 @@ func DefaultConfig() *Config {
 			Routing:       make(map[string]ModelRoute),
 			PrefixRouting: make(map[string]PrefixRoute),
 			LoadBalancing: make(map[string]LoadBalanceConfig),
+		},
+		Redis: RedisConfig{
+			Addr: "localhost:6379",
+			DB:   0,
+		},
+		RateLimit: RateLimitConfig{
+			Enabled: false,
+			Rate:    100,
+			Window:  time.Minute,
 		},
 	}
 }
