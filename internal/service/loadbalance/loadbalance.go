@@ -4,9 +4,8 @@ package loadbalance
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
@@ -29,17 +28,17 @@ type Service interface {
 // service 负载均衡管理服务实现。
 type service struct {
 	loadBalanceRepo repository.LoadBalanceRepository
-	logger          *zap.Logger
+	logger          logger.Logger
 }
 
 // NewService 创建负载均衡管理服务实例。
 func NewService(
 	loadBalanceRepo repository.LoadBalanceRepository,
-	logger *zap.Logger,
+	l logger.Logger,
 ) Service {
 	return &service{
 		loadBalanceRepo: loadBalanceRepo,
-		logger:          logger.Named("service.loadbalance"),
+		logger:          l.With(logger.String("service", "loadbalance")),
 	}
 }
 
@@ -51,24 +50,24 @@ func (s *service) ListGroups(ctx context.Context) ([]domain.LoadBalanceGroup, er
 
 // GetGroupByID 获取指定ID的负载均衡组。
 func (s *service) GetGroupByID(ctx context.Context, id int64) (*domain.LoadBalanceGroup, error) {
-	s.logger.Debug("getting load balance group by id", zap.Int64("id", id))
+	s.logger.Debug("getting load balance group by id", logger.Int64("id", id))
 	return s.loadBalanceRepo.GetGroupByID(ctx, id)
 }
 
 // CreateGroup 创建负载均衡组。
 func (s *service) CreateGroup(ctx context.Context, group *domain.LoadBalanceGroup) error {
-	s.logger.Info("creating load balance group", zap.String("name", group.Name))
+	s.logger.Info("creating load balance group", logger.String("name", group.Name))
 	return s.loadBalanceRepo.CreateGroup(ctx, group)
 }
 
 // UpdateGroup 更新负载均衡组。
 func (s *service) UpdateGroup(ctx context.Context, group *domain.LoadBalanceGroup) error {
-	s.logger.Info("updating load balance group", zap.Int64("id", group.ID), zap.String("name", group.Name))
+	s.logger.Info("updating load balance group", logger.Int64("id", group.ID), logger.String("name", group.Name))
 	return s.loadBalanceRepo.UpdateGroup(ctx, group)
 }
 
 // DeleteGroup 删除负载均衡组。
 func (s *service) DeleteGroup(ctx context.Context, id int64) error {
-	s.logger.Info("deleting load balance group", zap.Int64("id", id))
+	s.logger.Info("deleting load balance group", logger.Int64("id", id))
 	return s.loadBalanceRepo.DeleteGroup(ctx, id)
 }

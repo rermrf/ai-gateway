@@ -6,17 +6,18 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 
 	"ai-gateway/config"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository/dao"
 )
 
 // InitDB 根据配置初始化 GORM 数据库连接。
-func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
+func InitDB(cfg *config.Config, l logger.Logger) (*gorm.DB, error) {
 	// 从配置构建 DSN
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
 		cfg.MySQL.User,
@@ -28,13 +29,13 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 	)
 
 	// 配置 GORM 日志记录器
-	logLevel := logger.Silent
+	logLevel := gormlogger.Silent
 	if cfg.Log.Level == "debug" {
-		logLevel = logger.Info
+		logLevel = gormlogger.Info
 	}
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
+		Logger: gormlogger.Default.LogMode(logLevel),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("无法连接数据库: %w", err)
@@ -67,11 +68,11 @@ func InitDB(cfg *config.Config, zapLogger *zap.Logger) (*gorm.DB, error) {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
 
-	zapLogger.Info("database initialized",
-		zap.String("host", cfg.MySQL.Host),
-		zap.Int("port", cfg.MySQL.Port),
-		zap.String("database", cfg.MySQL.Database),
-		zap.String("dsn", maskDSN(dsn)),
+	l.Info("database initialized",
+		logger.String("host", cfg.MySQL.Host),
+		logger.Int("port", cfg.MySQL.Port),
+		logger.String("database", cfg.MySQL.Database),
+		logger.String("dsn", maskDSN(dsn)),
 	)
 
 	return db, nil

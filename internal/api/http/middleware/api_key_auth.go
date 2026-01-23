@@ -7,14 +7,15 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
+
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 )
 
 // APIKeyAuth 创建基于数据库的 API Key 认证中间件。
 // 此中间件从数据库验证 API keys，并记录使用统计。
-func APIKeyAuth(apiKeyService apikey.Service, logger *zap.Logger) gin.HandlerFunc {
+func APIKeyAuth(apiKeyService apikey.Service, l logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var key string
 
@@ -34,9 +35,9 @@ func APIKeyAuth(apiKeyService apikey.Service, logger *zap.Logger) gin.HandlerFun
 
 		// 检查是否提供了 API key
 		if key == "" {
-			logger.Warn("missing API key",
-				zap.String("path", c.Request.URL.Path),
-				zap.String("ip", c.ClientIP()),
+			l.Warn("missing API key",
+				logger.String("path", c.Request.URL.Path),
+				logger.String("ip", c.ClientIP()),
 			)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
@@ -50,10 +51,10 @@ func APIKeyAuth(apiKeyService apikey.Service, logger *zap.Logger) gin.HandlerFun
 		// 验证 API key
 		apiKey, err := apiKeyService.ValidateAPIKey(c.Request.Context(), key)
 		if err != nil {
-			logger.Warn("API key validation failed",
-				zap.Error(err),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("ip", c.ClientIP()),
+			l.Warn("API key validation failed",
+				logger.Error(err),
+				logger.String("path", c.Request.URL.Path),
+				logger.String("ip", c.ClientIP()),
 			)
 
 			var message string
@@ -87,9 +88,9 @@ func APIKeyAuth(apiKeyService apikey.Service, logger *zap.Logger) gin.HandlerFun
 		go func() {
 			// 使用新的 context，因为原始请求可能已完成
 			if err := apiKeyService.RecordUsage(context.Background(), apiKey.ID); err != nil {
-				logger.Error("failed to record API key usage",
-					zap.Error(err),
-					zap.Int64("key_id", apiKey.ID),
+				l.Error("failed to record API key usage",
+					logger.Error(err),
+					logger.Int64("key_id", apiKey.ID),
 				)
 			}
 		}()

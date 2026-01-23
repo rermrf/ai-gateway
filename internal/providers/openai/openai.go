@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	"go.uber.org/zap"
+	"ai-gateway/internal/pkg/logger"
 
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
@@ -22,11 +22,11 @@ type Provider struct {
 	apiKey  string
 	baseURL string
 	client  *http.Client
-	logger  *zap.Logger
+	logger  logger.Logger
 }
 
 // NewProvider 创建一个新的 OpenAI 提供商。
-func NewProvider(apiKey, baseURL string, client *http.Client, logger *zap.Logger) *Provider {
+func NewProvider(apiKey, baseURL string, client *http.Client, l logger.Logger) *Provider {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
@@ -37,7 +37,7 @@ func NewProvider(apiKey, baseURL string, client *http.Client, logger *zap.Logger
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		client:  client,
-		logger:  logger.Named("provider.openai"),
+		logger:  l.With(logger.String("provider", "openai")),
 	}
 }
 
@@ -169,8 +169,8 @@ func (p *Provider) Chat(ctx context.Context, req *domain.ChatRequest) (*domain.C
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		p.logger.Error("OpenAI API error",
-			zap.Int("status", resp.StatusCode),
-			zap.String("body", string(respBody)),
+			logger.Int("status", resp.StatusCode),
+			logger.String("body", string(respBody)),
 		)
 		return nil, fmt.Errorf("%w: status %d", errs.ErrProviderError, resp.StatusCode)
 	}
@@ -209,8 +209,8 @@ func (p *Provider) ChatStream(ctx context.Context, req *domain.ChatRequest) (<-c
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		p.logger.Error("OpenAI API error",
-			zap.Int("status", resp.StatusCode),
-			zap.String("body", string(respBody)),
+			logger.Int("status", resp.StatusCode),
+			logger.String("body", string(respBody)),
 		)
 		return nil, fmt.Errorf("%w: status %d", errs.ErrProviderError, resp.StatusCode)
 	}
@@ -238,7 +238,7 @@ func (p *Provider) readStream(body io.ReadCloser, ch chan<- domain.StreamDelta) 
 
 		var chunk chatResponse
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			p.logger.Warn("failed to parse SSE chunk", zap.Error(err))
+			p.logger.Warn("failed to parse SSE chunk", logger.Error(err))
 			continue
 		}
 

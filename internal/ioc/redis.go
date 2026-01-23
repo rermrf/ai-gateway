@@ -7,19 +7,19 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 
 	"ai-gateway/config"
+	"ai-gateway/internal/pkg/logger"
 )
 
 // InitRedis 初始化 Redis 客户端。
-func InitRedis(cfg *config.Config, logger *zap.Logger) (redis.Cmdable, error) {
+func InitRedis(cfg *config.Config, l logger.Logger) (redis.Cmdable, error) {
 	// 如果未配置 Redis 地址，且未启用限流，则返回 nil
 	if cfg.Redis.Addr == "" {
 		if cfg.RateLimit.Enabled {
 			return nil, fmt.Errorf("redis address is required when rate limit is enabled")
 		}
-		logger.Warn("redis not configured")
+		l.Warn("redis not configured")
 		return nil, nil
 	}
 
@@ -42,6 +42,6 @@ func InitRedis(cfg *config.Config, logger *zap.Logger) (redis.Cmdable, error) {
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
-	logger.Info("connected to redis", zap.String("addr", cfg.Redis.Addr), zap.Int("db", cfg.Redis.DB))
+	l.Info("connected to redis", logger.String("addr", cfg.Redis.Addr), logger.Int("db", cfg.Redis.DB))
 	return rdb, nil
 }

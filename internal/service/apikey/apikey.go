@@ -9,9 +9,8 @@ import (
 	"errors"
 	"time"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
@@ -55,29 +54,29 @@ type Service interface {
 // service API Key 服务实现（小写，不导出）。
 type service struct {
 	repo   repository.APIKeyRepository
-	logger *zap.Logger
+	logger logger.Logger
 }
 
 // NewService 创建 API Key 服务实例。
-func NewService(repo repository.APIKeyRepository, logger *zap.Logger) Service {
+func NewService(repo repository.APIKeyRepository, l logger.Logger) Service {
 	return &service{
 		repo:   repo,
-		logger: logger.Named("service.apikey"),
+		logger: l.With(logger.String("service", "apikey")),
 	}
 }
 
 // ValidateAPIKey 验证 API key 并返回用户信息。
 func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKey, error) {
 	s.logger.Debug("validating API key",
-		zap.String("key_prefix", maskAPIKey(key)),
+		logger.String("key_prefix", maskAPIKey(key)),
 	)
 
 	// 从数据库查询 API key
 	apiKey, err := s.repo.GetByKey(ctx, key)
 	if err != nil {
 		s.logger.Error("failed to query API key",
-			zap.Error(err),
-			zap.String("key_prefix", maskAPIKey(key)),
+			logger.Error(err),
+			logger.String("key_prefix", maskAPIKey(key)),
 		)
 		return nil, err
 	}
@@ -85,7 +84,7 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 	// API key 不存在
 	if apiKey == nil {
 		s.logger.Warn("API key not found",
-			zap.String("key_prefix", maskAPIKey(key)),
+			logger.String("key_prefix", maskAPIKey(key)),
 		)
 		return nil, ErrInvalidAPIKey
 	}
@@ -93,8 +92,8 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 	// 检查是否启用
 	if !apiKey.Enabled {
 		s.logger.Warn("API key is disabled",
-			zap.Int64("key_id", apiKey.ID),
-			zap.String("key_prefix", maskAPIKey(key)),
+			logger.Int64("key_id", apiKey.ID),
+			logger.String("key_prefix", maskAPIKey(key)),
 		)
 		return nil, ErrAPIKeyDisabled
 	}
@@ -102,17 +101,17 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 	// 检查是否过期
 	if apiKey.ExpiresAt != nil && apiKey.ExpiresAt.Before(time.Now()) {
 		s.logger.Warn("API key has expired",
-			zap.Int64("key_id", apiKey.ID),
-			zap.String("key_prefix", maskAPIKey(key)),
-			zap.Time("expires_at", *apiKey.ExpiresAt),
+			logger.Int64("key_id", apiKey.ID),
+			logger.String("key_prefix", maskAPIKey(key)),
+			logger.Time("expires_at", *apiKey.ExpiresAt),
 		)
 		return nil, ErrAPIKeyExpired
 	}
 
 	s.logger.Info("API key validated successfully",
-		zap.Int64("key_id", apiKey.ID),
-		zap.Int64("user_id", apiKey.UserID),
-		zap.String("key_name", apiKey.Name),
+		logger.Int64("key_id", apiKey.ID),
+		logger.Int64("user_id", apiKey.UserID),
+		logger.String("key_name", apiKey.Name),
 	)
 
 	return apiKey, nil
@@ -121,13 +120,13 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 // RecordUsage 记录 API key 使用时间。
 func (s *service) RecordUsage(ctx context.Context, apiKeyID int64) error {
 	s.logger.Debug("recording API key usage",
-		zap.Int64("key_id", apiKeyID),
+		logger.Int64("key_id", apiKeyID),
 	)
 
 	if err := s.repo.UpdateLastUsed(ctx, apiKeyID); err != nil {
 		s.logger.Error("failed to update last used time",
-			zap.Error(err),
-			zap.Int64("key_id", apiKeyID),
+			logger.Error(err),
+			logger.Int64("key_id", apiKeyID),
 		)
 		return err
 	}
@@ -179,11 +178,11 @@ func (s *service) Create(ctx context.Context, userID int64, name string) (*domai
 	}
 
 	if err := s.repo.Create(ctx, apiKey); err != nil {
-		s.logger.Error("failed to create api key", zap.Error(err))
+		s.logger.Error("failed to create api key", logger.Error(err))
 		return nil, "", err
 	}
 
-	s.logger.Info("api key created", zap.Int64("userId", userID), zap.String("name", name))
+	s.logger.Info("api key created", logger.Int64("userId", userID), logger.String("name", name))
 	return apiKey, key, nil
 }
 

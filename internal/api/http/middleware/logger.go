@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
+
+
+	"ai-gateway/internal/pkg/logger"
 )
 
 // Logger 返回基于 Zap 的日志中间件。
-func Logger(logger *zap.Logger) gin.HandlerFunc {
+func Logger(l logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -20,30 +22,30 @@ func Logger(logger *zap.Logger) gin.HandlerFunc {
 		latency := time.Since(start)
 		statusCode := c.Writer.Status()
 
-		fields := []zap.Field{
-			zap.Int("status", statusCode),
-			zap.String("method", c.Request.Method),
-			zap.String("path", path),
-			zap.String("query", query),
-			zap.String("ip", c.ClientIP()),
-			zap.Duration("latency", latency),
-			zap.String("user-agent", c.Request.UserAgent()),
+		fields := []logger.Field{
+			logger.Int("status", statusCode),
+			logger.String("method", c.Request.Method),
+			logger.String("path", path),
+			logger.String("query", query),
+			logger.String("ip", c.ClientIP()),
+			logger.Duration("latency", latency),
+			logger.String("user-agent", c.Request.UserAgent()),
 		}
 
 		if requestID := c.GetString("request_id"); requestID != "" {
-			fields = append(fields, zap.String("request_id", requestID))
+			fields = append(fields, logger.String("request_id", requestID))
 		}
 
 		if len(c.Errors) > 0 {
-			fields = append(fields, zap.String("errors", c.Errors.String()))
+			fields = append(fields, logger.String("errors", c.Errors.String()))
 		}
 
 		if statusCode >= 500 {
-			logger.Error("server error", fields...)
+			l.Error("server error", fields...)
 		} else if statusCode >= 400 {
-			logger.Warn("client error", fields...)
+			l.Warn("client error", fields...)
 		} else {
-			logger.Info("request completed", fields...)
+			l.Info("request completed", fields...)
 		}
 	}
 }

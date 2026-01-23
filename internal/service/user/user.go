@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
@@ -44,25 +44,25 @@ type Service interface {
 type service struct {
 	userRepo     repository.UserRepository
 	usageLogRepo repository.UsageLogRepository
-	logger       *zap.Logger
+	logger       logger.Logger
 }
 
 // NewService 创建用户服务实例。
 func NewService(
 	userRepo repository.UserRepository,
 	usageLogRepo repository.UsageLogRepository,
-	logger *zap.Logger,
+	l logger.Logger,
 ) Service {
 	return &service{
 		userRepo:     userRepo,
 		usageLogRepo: usageLogRepo,
-		logger:       logger.Named("service.user"),
+		logger:       l.With(logger.String("service", "user")),
 	}
 }
 
 // Register 用户注册。
 func (s *service) Register(ctx context.Context, username, email, password string) (*domain.User, error) {
-	s.logger.Info("registering user", zap.String("username", username))
+	s.logger.Info("registering user", logger.String("username", username))
 
 	// 检查用户名是否已存在
 	existing, _ := s.userRepo.GetByUsername(ctx, username)
@@ -79,7 +79,7 @@ func (s *service) Register(ctx context.Context, username, email, password string
 	// 加密密码
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		s.logger.Error("failed to hash password", zap.Error(err))
+		s.logger.Error("failed to hash password", logger.Error(err))
 		return nil, err
 	}
 
@@ -92,11 +92,11 @@ func (s *service) Register(ctx context.Context, username, email, password string
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
-		s.logger.Error("failed to create user", zap.Error(err))
+		s.logger.Error("failed to create user", logger.Error(err))
 		return nil, err
 	}
 
-	s.logger.Info("user registered", zap.Int64("userId", user.ID))
+	s.logger.Info("user registered", logger.Int64("userId", user.ID))
 	return user, nil
 }
 
@@ -141,7 +141,7 @@ func (s *service) UpdateProfile(ctx context.Context, userID int64, email string)
 	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
-		s.logger.Error("failed to update user", zap.Error(err))
+		s.logger.Error("failed to update user", logger.Error(err))
 		return nil, err
 	}
 	return user, nil

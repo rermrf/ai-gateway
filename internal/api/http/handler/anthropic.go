@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
 	"ai-gateway/internal/converter"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/domain"
 	gatewaysvc "ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/usage"
@@ -24,17 +24,17 @@ type AnthropicHandler struct {
 	walletSvc wallet.Service
 	usageSvc  usage.Service
 	converter *converter.AnthropicConverter
-	logger    *zap.Logger
+	logger    logger.Logger
 }
 
 // NewAnthropicHandler 创建一个新的 Anthropic 处理器。
-func NewAnthropicHandler(gw gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, logger *zap.Logger) *AnthropicHandler {
+func NewAnthropicHandler(gw gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, l logger.Logger) *AnthropicHandler {
 	return &AnthropicHandler{
 		gw:        gw,
 		walletSvc: walletSvc,
 		usageSvc:  usageSvc,
 		converter: converter.NewAnthropicConverter(),
-		logger:    logger.Named("handler.anthropic"),
+		logger:    l.With(logger.String("handler", "anthropic")),
 	}
 }
 
@@ -47,7 +47,7 @@ func (h *AnthropicHandler) Messages(c *gin.Context) {
 	if userID > 0 {
 		hasBalance, err := h.walletSvc.HasBalance(c.Request.Context(), userID)
 		if err != nil {
-			h.logger.Error("failed to check balance", zap.Error(err))
+			h.logger.Error("failed to check balance", logger.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"type": "error",
 				"error": gin.H{
@@ -72,7 +72,7 @@ func (h *AnthropicHandler) Messages(c *gin.Context) {
 	start := time.Now()
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		h.logger.Error("failed to read request body", zap.Error(err))
+		h.logger.Error("failed to read request body", logger.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"type": "error",
 			"error": gin.H{
@@ -85,7 +85,7 @@ func (h *AnthropicHandler) Messages(c *gin.Context) {
 
 	req, err := h.converter.DecodeRequest(body)
 	if err != nil {
-		h.logger.Error("failed to decode request", zap.Error(err))
+		h.logger.Error("failed to decode request", logger.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"type": "error",
 			"error": gin.H{
@@ -106,7 +106,7 @@ func (h *AnthropicHandler) Messages(c *gin.Context) {
 func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
 	resp, err := h.gw.Chat(c.Request.Context(), req)
 	if err != nil {
-		h.logger.Error("chat request failed", zap.Error(err))
+		h.logger.Error("chat request failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"type": "error",
 			"error": gin.H{
@@ -124,7 +124,7 @@ func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatReque
 	// Encode Response
 	respBody, err := h.converter.EncodeResponse(resp)
 	if err != nil {
-		h.logger.Error("failed to encode response", zap.Error(err))
+		h.logger.Error("failed to encode response", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"type": "error",
 			"error": gin.H{
@@ -141,7 +141,7 @@ func (h *AnthropicHandler) handleNonStream(c *gin.Context, req *domain.ChatReque
 func (h *AnthropicHandler) handleStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
 	deltaCh, _, err := h.gw.ChatStream(c.Request.Context(), req)
 	if err != nil {
-		h.logger.Error("stream request failed", zap.Error(err))
+		h.logger.Error("stream request failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"type": "error",
 			"error": gin.H{
@@ -284,7 +284,7 @@ func (h *AnthropicHandler) logUsage(c *gin.Context, model, provider string, inpu
 	// 异步记录
 	go func() {
 		if err := h.usageSvc.LogRequest(context.Background(), log); err != nil {
-			h.logger.Error("failed to log usage", zap.Error(err))
+			h.logger.Error("failed to log usage", logger.Error(err))
 		}
 	}()
 }

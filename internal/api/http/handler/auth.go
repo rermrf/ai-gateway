@@ -6,10 +6,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/auth"
 	"ai-gateway/internal/service/user"
 )
@@ -18,19 +18,19 @@ import (
 type AuthHandler struct {
 	userSvc     user.Service
 	authService *auth.AuthService
-	logger      *zap.Logger
+	logger      logger.Logger
 }
 
 // NewAuthHandler 创建一个新的 AuthHandler。
 func NewAuthHandler(
 	userSvc user.Service,
 	authService *auth.AuthService,
-	logger *zap.Logger,
+	l logger.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
 		userSvc:     userSvc,
 		authService: authService,
-		logger:      logger.Named("handler.auth"),
+		logger:      l.With(logger.String("handler", "auth")),
 	}
 }
 
@@ -118,7 +118,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// 生成 JWT
 	token, err := h.authService.GenerateToken(u.ID, u.Username, string(u.Role))
 	if err != nil {
-		h.logger.Error("failed to generate token", zap.Error(err))
+		h.logger.Error("failed to generate token", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "登录失败"})
 		return
 	}
@@ -135,7 +135,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // handleError 统一错误处理。
 func (h *AuthHandler) handleError(c *gin.Context, err error) {
-	h.logger.Warn("request failed", zap.Error(err))
+	h.logger.Warn("request failed", logger.Error(err))
 
 	switch err {
 	case user.ErrUserAlreadyExists:

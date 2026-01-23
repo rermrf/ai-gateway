@@ -4,9 +4,8 @@ package routingrule
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
@@ -27,17 +26,17 @@ type Service interface {
 // service 路由规则管理服务实现。
 type service struct {
 	routingRuleRepo repository.RoutingRuleRepository
-	logger          *zap.Logger
+	logger          logger.Logger
 }
 
 // NewService 创建路由规则管理服务实例。
 func NewService(
 	routingRuleRepo repository.RoutingRuleRepository,
-	logger *zap.Logger,
+	l logger.Logger,
 ) Service {
 	return &service{
 		routingRuleRepo: routingRuleRepo,
-		logger:          logger.Named("service.routingrule"),
+		logger:          l.With(logger.String("service", "routingrule")),
 	}
 }
 
@@ -49,18 +48,18 @@ func (s *service) List(ctx context.Context) ([]domain.RoutingRule, error) {
 
 // Create 创建路由规则。
 func (s *service) Create(ctx context.Context, rule *domain.RoutingRule) error {
-	s.logger.Info("creating routing rule", zap.String("pattern", rule.Pattern))
+	s.logger.Info("creating routing rule", logger.String("pattern", rule.Pattern))
 	return s.routingRuleRepo.Create(ctx, rule)
 }
 
 // Update 更新路由规则。
 func (s *service) Update(ctx context.Context, rule *domain.RoutingRule) error {
-	s.logger.Info("updating routing rule", zap.Int64("id", rule.ID))
+	s.logger.Info("updating routing rule", logger.Int64("id", rule.ID))
 	return s.routingRuleRepo.Update(ctx, rule)
 }
 
 // Delete 删除路由规则。
 func (s *service) Delete(ctx context.Context, id int64) error {
-	s.logger.Info("deleting routing rule", zap.Int64("id", id))
+	s.logger.Info("deleting routing rule", logger.Int64("id", id))
 	return s.routingRuleRepo.Delete(ctx, id)
 }

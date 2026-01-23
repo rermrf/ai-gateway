@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
 	"ai-gateway/internal/errs"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/user"
 	"ai-gateway/internal/service/wallet"
@@ -15,21 +15,21 @@ import (
 
 // ErrorHandler 提供统一的 HTTP 错误处理。
 type ErrorHandler struct {
-	logger *zap.Logger
+	logger logger.Logger
 }
 
 // NewErrorHandler 创建错误处理器。
-func NewErrorHandler(logger *zap.Logger) *ErrorHandler {
-	return &ErrorHandler{logger: logger}
+func NewErrorHandler(l logger.Logger) *ErrorHandler {
+	return &ErrorHandler{logger: l}
 }
 
 // HandleError 根据错误类型返回适当的 HTTP 响应。
 // 支持多种错误类型的统一处理。
 func (h *ErrorHandler) HandleError(c *gin.Context, err error) {
 	h.logger.Warn("request failed",
-		zap.Error(err),
-		zap.String("path", c.Request.URL.Path),
-		zap.String("method", c.Request.Method),
+		logger.Error(err),
+		logger.String("path", c.Request.URL.Path),
+		logger.String("method", c.Request.Method),
 	)
 
 	switch err {
@@ -76,8 +76,8 @@ func (h *ErrorHandler) HandleError(c *gin.Context, err error) {
 // HandleAPIError 处理 OpenAI/Anthropic 兼容格式的 API 错误。
 func (h *ErrorHandler) HandleAPIError(c *gin.Context, err error, errorType string) {
 	h.logger.Warn("API request failed",
-		zap.Error(err),
-		zap.String("path", c.Request.URL.Path),
+		logger.Error(err),
+		logger.String("path", c.Request.URL.Path),
 	)
 
 	statusCode := http.StatusInternalServerError

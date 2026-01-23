@@ -10,10 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/config"
 	"ai-gateway/internal/ioc"
+	"ai-gateway/internal/pkg/logger"
 )
 
 func main() {
@@ -71,21 +70,21 @@ func main() {
 	}
 
 	// 初始化日志记录器
-	logger := ioc.InitLogger(cfg)
-	defer logger.Sync()
+	l := ioc.InitLogger(cfg)
 
-	logger.Info("starting ai-gateway",
-		zap.String("addr", cfg.HTTP.Addr),
-		zap.Int("providers_count", len(cfg.Providers)),
+	l.Info("starting ai-gateway",
+		logger.String("addr", cfg.HTTP.Addr),
+		logger.Int("providers_count", len(cfg.Providers)),
 	)
 
 	// 初始化 HTTP 服务器
-	server := ioc.InitGinServer(cfg, logger)
+	server := ioc.InitGinServer(cfg, l)
 
 	// 在协程中启动服务器
 	go func() {
 		if err := server.Start(cfg.HTTP.Addr); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("http server failed", zap.Error(err))
+			l.Error("http server failed", logger.Error(err))
+			os.Exit(1)
 		}
 	}()
 
@@ -94,15 +93,15 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info("shutting down server...")
+	l.Info("shutting down server...")
 
 	// 带有超时的优雅停机
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("server shutdown failed", zap.Error(err))
+		l.Error("server shutdown failed", logger.Error(err))
 	}
 
-	logger.Info("server exited")
+	l.Info("server exited")
 }

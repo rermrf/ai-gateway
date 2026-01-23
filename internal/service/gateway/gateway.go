@@ -9,12 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
+
+
 
 	"ai-gateway/config"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/loadbalancer"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/providers"
 	"ai-gateway/internal/providers/anthropic"
 	"ai-gateway/internal/providers/openai"
@@ -55,7 +57,7 @@ type gatewayService struct {
 	prefixRoutes     []prefixRouteEntry                                  // 按优先级排序
 	loadBalancers    map[string]loadbalancer.LoadBalancer[*providerNode] // 模型模式 -> 负载均衡器
 	httpClient       *http.Client
-	logger           *zap.Logger
+	logger           logger.Logger
 }
 
 type prefixRouteEntry struct {
@@ -71,7 +73,7 @@ func NewGatewayService(
 	providerRepo repository.ProviderRepository,
 	routingRuleRepo repository.RoutingRuleRepository,
 	loadBalanceRepo repository.LoadBalanceRepository,
-	logger *zap.Logger,
+	l logger.Logger,
 ) GatewayService {
 	g := &gatewayService{
 		providerRepo:     providerRepo,
@@ -83,12 +85,12 @@ func NewGatewayService(
 		routes:           make(map[string]config.ModelRoute),
 		loadBalancers:    make(map[string]loadbalancer.LoadBalancer[*providerNode]),
 		httpClient:       &http.Client{Timeout: 120 * time.Second},
-		logger:           logger.Named("gateway"),
+		logger:           l.With(logger.String("service", "gateway")),
 	}
 
 	// 初始从数据库加载
 	if err := g.Reload(context.Background()); err != nil {
-		logger.Error("failed to load initial configuration from database", zap.Error(err))
+		g.logger.Error("failed to load initial configuration from database", logger.Error(err))
 	}
 
 	return g
@@ -129,7 +131,7 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 				g.logger,
 			)
 		default:
-			g.logger.Warn("unknown provider type", zap.String("type", p.Type))
+			g.logger.Warn("unknown provider type", logger.String("type", p.Type))
 			continue
 		}
 
@@ -140,10 +142,10 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		}
 
 		g.logger.Info("registered provider from database",
-			zap.String("name", p.Name),
-			zap.String("type", p.Type),
-			zap.String("baseURL", p.BaseURL),
-			zap.Int("models", len(p.Models)),
+			logger.String("name", p.Name),
+			logger.String("type", p.Type),
+			logger.String("baseURL", p.BaseURL),
+			logger.Int("models", len(p.Models)),
 		)
 
 		// 跟踪每种类型的默认供应商
@@ -197,8 +199,8 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		members, err := g.loadBalanceRepo.GetMembers(ctx, group.ID)
 		if err != nil {
 			g.logger.Warn("failed to load members for load balance group",
-				zap.String("group", group.Name),
-				zap.Error(err),
+				logger.String("group", group.Name),
+				logger.Error(err),
 			)
 			continue
 		}
@@ -233,9 +235,9 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 
 		newLoadBalancers[group.ModelPattern] = lb
 		g.logger.Info("created load balancer from database",
-			zap.String("model", group.ModelPattern),
-			zap.String("strategy", group.Strategy),
-			zap.Int("providers", len(nodes)),
+			logger.String("model", group.ModelPattern),
+			logger.String("strategy", group.Strategy),
+			logger.Int("providers", len(nodes)),
 		)
 	}
 
@@ -248,10 +250,10 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 	g.loadBalancers = newLoadBalancers
 
 	g.logger.Info("configuration reloaded from database",
-		zap.Int("providers", len(g.providers)),
-		zap.Int("routes", len(g.routes)),
-		zap.Int("prefixRoutes", len(g.prefixRoutes)),
-		zap.Int("loadBalancers", len(g.loadBalancers)),
+		logger.Int("providers", len(g.providers)),
+		logger.Int("routes", len(g.routes)),
+		logger.Int("prefixRoutes", len(g.prefixRoutes)),
+		logger.Int("loadBalancers", len(g.loadBalancers)),
 	)
 
 	return nil
@@ -270,7 +272,7 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 		if actualModel == "" {
 			actualModel = model
 		}
-		g.logger.Debug("using exact route", zap.String("model", model), zap.String("provider", route.Provider))
+		g.logger.Debug("using exact route", logger.String("model", model), logger.String("provider", route.Provider))
 		return provider, actualModel, nil
 	}
 
@@ -278,7 +280,7 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 	if lb, ok := g.loadBalancers[model]; ok {
 		node, err := lb.Select()
 		if err == nil && node != nil {
-			g.logger.Debug("using load balancer", zap.String("model", model), zap.String("provider", node.ID()))
+			g.logger.Debug("using load balancer", logger.String("model", model), logger.String("provider", node.ID()))
 			return node.provider, model, nil
 		}
 	}
@@ -289,9 +291,9 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 			provider, ok := g.providers[entry.provider]
 			if ok {
 				g.logger.Debug("using prefix route",
-					zap.String("model", model),
-					zap.String("prefix", entry.prefix),
-					zap.String("provider", entry.provider),
+					logger.String("model", model),
+					logger.String("prefix", entry.prefix),
+					logger.String("provider", entry.provider),
 				)
 				return provider, model, nil
 			}
@@ -311,9 +313,9 @@ func (g *gatewayService) GetProvider(model string) (providers.Provider, string, 
 	}
 
 	g.logger.Debug("using type default",
-		zap.String("model", model),
-		zap.String("type", providerType),
-		zap.String("provider", providerName),
+		logger.String("model", model),
+		logger.String("type", providerType),
+		logger.String("provider", providerName),
 	)
 	return provider, model, nil
 }
@@ -340,9 +342,9 @@ func (g *gatewayService) Chat(ctx context.Context, req *domain.ChatRequest) (*do
 	req.Model = actualModel
 
 	g.logger.Info("routing chat request",
-		zap.String("model", req.Model),
-		zap.String("provider", provider.Name()),
-		zap.Bool("stream", req.Stream),
+		logger.String("model", req.Model),
+		logger.String("provider", provider.Name()),
+		logger.Any("stream", req.Stream),
 	)
 
 	resp, err := provider.Chat(ctx, req)
@@ -363,8 +365,8 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 	req.Model = actualModel
 
 	g.logger.Info("routing streaming chat request",
-		zap.String("model", req.Model),
-		zap.String("provider", provider.Name()),
+		logger.String("model", req.Model),
+		logger.String("provider", provider.Name()),
 	)
 
 	ch, err := provider.ChatStream(ctx, req)
@@ -401,8 +403,8 @@ func (g *gatewayService) ListModels(ctx context.Context) ([]string, error) {
 		models, err := provider.ListModels(ctx)
 		if err != nil {
 			g.logger.Warn("failed to list models from provider",
-				zap.String("provider", name),
-				zap.Error(err),
+				logger.String("provider", name),
+				logger.Error(err),
 			)
 			continue
 		}

@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	"go.uber.org/zap"
+	"ai-gateway/internal/pkg/logger"
 
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
@@ -22,11 +22,11 @@ type Provider struct {
 	apiKey  string
 	baseURL string
 	client  *http.Client
-	logger  *zap.Logger
+	logger  logger.Logger
 }
 
 // NewProvider creates a new Anthropic provider.
-func NewProvider(apiKey, baseURL string, client *http.Client, logger *zap.Logger) *Provider {
+func NewProvider(apiKey, baseURL string, client *http.Client, l logger.Logger) *Provider {
 	if baseURL == "" {
 		baseURL = "https://api.anthropic.com"
 	}
@@ -37,7 +37,7 @@ func NewProvider(apiKey, baseURL string, client *http.Client, logger *zap.Logger
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		client:  client,
-		logger:  logger.Named("provider.anthropic"),
+		logger:  l.With(logger.String("provider", "anthropic")),
 	}
 }
 
@@ -164,8 +164,8 @@ func (p *Provider) Chat(ctx context.Context, req *domain.ChatRequest) (*domain.C
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		p.logger.Error("Anthropic API error",
-			zap.Int("status", resp.StatusCode),
-			zap.String("body", string(respBody)),
+			logger.Int("status", resp.StatusCode),
+			logger.String("body", string(respBody)),
 		)
 		return nil, fmt.Errorf("%w: status %d", errs.ErrProviderError, resp.StatusCode)
 	}
@@ -203,8 +203,8 @@ func (p *Provider) ChatStream(ctx context.Context, req *domain.ChatRequest) (<-c
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		p.logger.Error("Anthropic API error",
-			zap.Int("status", resp.StatusCode),
-			zap.String("body", string(respBody)),
+			logger.Int("status", resp.StatusCode),
+			logger.String("body", string(respBody)),
 		)
 		return nil, fmt.Errorf("%w: status %d", errs.ErrProviderError, resp.StatusCode)
 	}
@@ -232,7 +232,7 @@ func (p *Provider) readStream(body io.ReadCloser, ch chan<- domain.StreamDelta) 
 
 		var event streamEvent
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			p.logger.Warn("failed to parse SSE event", zap.Error(err))
+			p.logger.Warn("failed to parse SSE event", logger.Error(err))
 			continue
 		}
 

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
 	"ai-gateway/internal/converter"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/domain"
 	gatewaysvc "ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/usage"
@@ -24,17 +24,17 @@ type OpenAIHandler struct {
 	walletSvc wallet.Service
 	usageSvc  usage.Service
 	converter *converter.OpenAIConverter
-	logger    *zap.Logger
+	logger    logger.Logger
 }
 
 // NewOpenAIHandler 创建一个新的 OpenAI 处理器。
-func NewOpenAIHandler(gatewayService gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, logger *zap.Logger) *OpenAIHandler {
+func NewOpenAIHandler(gatewayService gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, l logger.Logger) *OpenAIHandler {
 	return &OpenAIHandler{
 		gw:        gatewayService,
 		walletSvc: walletSvc,
 		usageSvc:  usageSvc,
 		converter: converter.NewOpenAIConverter(),
-		logger:    logger.Named("handler.openai"),
+		logger:    l.With(logger.String("handler", "openai")),
 	}
 }
 
@@ -52,7 +52,7 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 	if userID > 0 {
 		hasBalance, err := h.walletSvc.HasBalance(c.Request.Context(), userID)
 		if err != nil {
-			h.logger.Error("failed to check balance", zap.Error(err))
+			h.logger.Error("failed to check balance", logger.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": gin.H{
 					"message": "Failed to check balance",
@@ -75,7 +75,7 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 	start := time.Now()
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		h.logger.Error("failed to read request body", zap.Error(err))
+		h.logger.Error("failed to read request body", logger.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"message": "Failed to read request body",
@@ -87,7 +87,7 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 
 	req, err := h.converter.DecodeRequest(body)
 	if err != nil {
-		h.logger.Error("failed to decode request", zap.Error(err))
+		h.logger.Error("failed to decode request", logger.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"message": err.Error(),
@@ -107,7 +107,7 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
 	resp, err := h.gw.Chat(c.Request.Context(), req)
 	if err != nil {
-		h.logger.Error("chat request failed", zap.Error(err))
+		h.logger.Error("chat request failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": err.Error(),
@@ -123,7 +123,7 @@ func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest,
 
 	respBody, err := h.converter.EncodeResponse(resp)
 	if err != nil {
-		h.logger.Error("failed to encode response", zap.Error(err))
+		h.logger.Error("failed to encode response", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": "Failed to encode response",
@@ -139,7 +139,7 @@ func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest,
 func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest, start time.Time) {
 	deltaCh, providerName, err := h.gw.ChatStream(c.Request.Context(), req)
 	if err != nil {
-		h.logger.Error("stream request failed", zap.Error(err))
+		h.logger.Error("stream request failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": err.Error(),
@@ -195,7 +195,7 @@ func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest, st
 
 			chunk, err := h.converter.EncodeStreamDelta(&delta)
 			if err != nil {
-				h.logger.Warn("failed to encode delta", zap.Error(err))
+				h.logger.Warn("failed to encode delta", logger.Error(err))
 				return true
 			}
 
@@ -258,7 +258,7 @@ func (h *OpenAIHandler) logUsage(c *gin.Context, model, provider string, inputTo
 
 	go func() {
 		if err := h.usageSvc.LogRequest(context.Background(), log); err != nil {
-			h.logger.Error("failed to log usage", zap.Error(err))
+			h.logger.Error("failed to log usage", logger.Error(err))
 		}
 	}()
 }
@@ -267,7 +267,7 @@ func (h *OpenAIHandler) logUsage(c *gin.Context, model, provider string, inputTo
 func (h *OpenAIHandler) ListModels(c *gin.Context) {
 	models, err := h.gw.ListModels(c.Request.Context())
 	if err != nil {
-		h.logger.Error("failed to list models", zap.Error(err))
+		h.logger.Error("failed to list models", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": err.Error(),

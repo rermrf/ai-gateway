@@ -4,10 +4,9 @@ package ioc
 import (
 	"time"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/config"
 	httpapi "ai-gateway/internal/api/http"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/api/http/handler"
 	"ai-gateway/internal/repository"
 	"ai-gateway/internal/repository/dao"
@@ -24,11 +23,12 @@ import (
 )
 
 // InitGinServer 初始化带有所有依赖项的 Gin HTTP 服务器。
-func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
+func InitGinServer(cfg *config.Config, l logger.Logger) *httpapi.Server {
 	// 初始化数据库
-	db, err := InitDB(cfg, logger)
+	db, err := InitDB(cfg, l)
 	if err != nil {
-		logger.Fatal("failed to initialize database", zap.Error(err))
+		l.Error("failed to initialize database", logger.Error(err))
+		panic(err)
 	}
 
 	// 初始化 DAOs
@@ -59,38 +59,38 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 	authService := auth.NewAuthService(jwtSecret, 24*time.Hour)
 
 	// 初始化 API Key 服务
-	apiKeySvc := apikey.NewService(apiKeyRepo, logger)
+	apiKeySvc := apikey.NewService(apiKeyRepo, l)
 
 	// 初始化 ModelRate 服务 (UserSvc 之前可能不需要，但 Wallet 需要)
-	modelRateSvc := modelrate.NewService(modelRateRepo, logger)
+	modelRateSvc := modelrate.NewService(modelRateRepo, l)
 
 	// 初始化 Wallet 服务 (依赖 ModelRateSvc)
-	walletSvc := wallet.NewService(walletRepo, modelRateSvc, logger)
+	walletSvc := wallet.NewService(walletRepo, modelRateSvc, l)
 
 	// 初始化用户服务
-	userSvc := user.NewService(userRepo, usageLogRepo, logger)
+	userSvc := user.NewService(userRepo, usageLogRepo, l)
 
 	// 初始化使用统计服务 (依赖 WalletSvc)
-	usageSvc := usage.NewService(usageLogRepo, walletSvc, logger)
+	usageSvc := usage.NewService(usageLogRepo, walletSvc, l)
 
 	// 初始化管理服务 (Admin Services)
-	providerSvc := provider.NewService(providerRepo, logger)
-	routingRuleSvc := routingrule.NewService(routingRuleRepo, logger)
-	loadBalanceSvc := loadbalance.NewService(loadBalanceRepo, logger)
+	providerSvc := provider.NewService(providerRepo, l)
+	routingRuleSvc := routingrule.NewService(routingRuleRepo, l)
+	loadBalanceSvc := loadbalance.NewService(loadBalanceRepo, l)
 
 	// 使用仓库初始化网关服务
 	gw := gateway.NewGatewayService(
 		providerRepo,
 		routingRuleRepo,
 		loadBalanceRepo,
-		logger,
+		l,
 	)
 
 	// 初始化处理器
-	openaiHandler := handler.NewOpenAIHandler(gw, walletSvc, usageSvc, logger)
-	anthropicHandler := handler.NewAnthropicHandler(gw, walletSvc, usageSvc, logger)
-	authHandler := handler.NewAuthHandler(userSvc, authService, logger)
-	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, modelRateSvc, logger)
+	openaiHandler := handler.NewOpenAIHandler(gw, walletSvc, usageSvc, l)
+	anthropicHandler := handler.NewAnthropicHandler(gw, walletSvc, usageSvc, l)
+	authHandler := handler.NewAuthHandler(userSvc, authService, l)
+	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, modelRateSvc, l)
 	adminHandler := handler.NewAdminHandler(
 		providerSvc,
 		routingRuleSvc,
@@ -101,7 +101,7 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 		gw,
 		modelRateSvc,
 		walletSvc,
-		logger,
+		l,
 	)
 
 	// 创建并返回带有身份验证配置的服务器
@@ -114,6 +114,6 @@ func InitGinServer(cfg *config.Config, logger *zap.Logger) *httpapi.Server {
 		authService,
 		apiKeySvc,
 		cfg.Auth,
-		logger,
+		l,
 	)
 }

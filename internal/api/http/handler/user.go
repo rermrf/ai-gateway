@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
 	"ai-gateway/internal/api/http/middleware"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
@@ -24,7 +24,7 @@ type UserHandler struct {
 	walletSvc    wallet.Service
 	gw           gateway.GatewayService
 	modelRateSvc modelrate.Service
-	logger       *zap.Logger
+	logger       logger.Logger
 }
 
 // NewUserHandler 创建一个新的 UserHandler。
@@ -34,7 +34,7 @@ func NewUserHandler(
 	walletSvc wallet.Service,
 	gw gateway.GatewayService,
 	modelRateSvc modelrate.Service,
-	logger *zap.Logger,
+	l logger.Logger,
 ) *UserHandler {
 	return &UserHandler{
 		svc:          svc,
@@ -42,7 +42,7 @@ func NewUserHandler(
 		walletSvc:    walletSvc,
 		gw:           gw,
 		modelRateSvc: modelRateSvc,
-		logger:       logger.Named("handler.user"),
+		logger:       l.With(logger.String("handler", "user")),
 	}
 }
 
@@ -81,8 +81,8 @@ func (h *UserHandler) ListModelsWithPricing(c *gin.Context) {
 		promptPrice, completionPrice, err := h.modelRateSvc.GetRateForModel(c.Request.Context(), model)
 		if err != nil {
 			h.logger.Warn("failed to get rate for model",
-				zap.String("model", model),
-				zap.Error(err))
+				logger.String("model", model),
+				logger.Error(err))
 			// 继续处理，使用默认价格 0
 		}
 
@@ -301,7 +301,7 @@ func (h *UserHandler) toResponse(u *domain.User) UserResponse {
 
 // handleError 统一错误处理。
 func (h *UserHandler) handleError(c *gin.Context, err error) {
-	h.logger.Warn("request failed", zap.Error(err))
+	h.logger.Warn("request failed", logger.Error(err))
 
 	switch err {
 	case user.ErrUserNotFound:

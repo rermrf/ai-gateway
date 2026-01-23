@@ -3,9 +3,8 @@ package modelrate
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
@@ -23,28 +22,28 @@ type Service interface {
 
 type service struct {
 	repo   repository.ModelRateRepository
-	logger *zap.Logger
+	logger logger.Logger
 }
 
-func NewService(repo repository.ModelRateRepository, logger *zap.Logger) Service {
+func NewService(repo repository.ModelRateRepository, l logger.Logger) Service {
 	return &service{
 		repo:   repo,
-		logger: logger.Named("service.modelrate"),
+		logger: l.With(logger.String("service", "modelrate")),
 	}
 }
 
 func (s *service) Create(ctx context.Context, rate *domain.ModelRate) error {
-	s.logger.Info("creating model rate", zap.String("pattern", rate.ModelPattern))
+	s.logger.Info("creating model rate", logger.String("pattern", rate.ModelPattern))
 	return s.repo.Create(ctx, rate)
 }
 
 func (s *service) Update(ctx context.Context, rate *domain.ModelRate) error {
-	s.logger.Info("updating model rate", zap.Int64("id", rate.ID))
+	s.logger.Info("updating model rate", logger.Int64("id", rate.ID))
 	return s.repo.Update(ctx, rate)
 }
 
 func (s *service) Delete(ctx context.Context, id int64) error {
-	s.logger.Info("deleting model rate", zap.Int64("id", id))
+	s.logger.Info("deleting model rate", logger.Int64("id", id))
 	return s.repo.Delete(ctx, id)
 }
 
@@ -62,7 +61,7 @@ func (s *service) List(ctx context.Context) ([]domain.ModelRate, error) {
 func (s *service) GetRateForModel(ctx context.Context, modelName string) (float64, float64, error) {
 	rates, err := s.repo.GetAllEnabled(ctx)
 	if err != nil {
-		s.logger.Error("failed to get enabled rates", zap.Error(err))
+		s.logger.Error("failed to get enabled rates", logger.Error(err))
 		return 0, 0, nil // 出错降级为默认费率
 	}
 

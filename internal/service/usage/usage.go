@@ -4,9 +4,8 @@ package usage
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 	"ai-gateway/internal/service/wallet"
 )
@@ -27,19 +26,19 @@ type Service interface {
 type service struct {
 	usageLogRepo repository.UsageLogRepository
 	walletSvc    wallet.Service
-	logger       *zap.Logger
+	logger       logger.Logger
 }
 
 // NewService 创建使用统计服务实例。
 func NewService(
 	usageLogRepo repository.UsageLogRepository,
 	walletSvc wallet.Service,
-	logger *zap.Logger,
+	l logger.Logger,
 ) Service {
 	return &service{
 		usageLogRepo: usageLogRepo,
 		walletSvc:    walletSvc,
-		logger:       logger.Named("service.usage"),
+		logger:       l.With(logger.String("service", "usage")),
 	}
 }
 
@@ -49,7 +48,7 @@ func (s *service) GetGlobalStats(ctx context.Context) (*domain.UsageStats, error
 
 	stats, err := s.usageLogRepo.GetGlobalStats(ctx)
 	if err != nil {
-		s.logger.Error("failed to get global stats", zap.Error(err))
+		s.logger.Error("failed to get global stats", logger.Error(err))
 		return nil, err
 	}
 
@@ -58,7 +57,8 @@ func (s *service) GetGlobalStats(ctx context.Context) (*domain.UsageStats, error
 
 // GetGlobalDailyUsage 获取全局每日使用统计。
 func (s *service) GetGlobalDailyUsage(ctx context.Context, days int) ([]domain.DailyUsage, error) {
-	s.logger.Debug("getting global daily usage", zap.Int("days", days))
+	s.logger.Debug("getting global daily usage", logger.Int("days", days))
+
 
 	// TODO: 需要在 repository 层添加 GetGlobalDailyUsage 方法
 	// 目前可以返回空切片或实现一个聚合逻辑
@@ -85,17 +85,17 @@ func (s *service) LogRequest(ctx context.Context, log *domain.UsageLog) error {
 			// 扣费失败仅记录日志，暂不阻断（取决于策略，如果是预付费严格校验，应该在网关入口检查余额）
 			// 但这里是 LogRequest，请求已经完成了。
 			s.logger.Error("failed to deduct wallet balance",
-				zap.Int64("userID", log.UserID),
-				zap.String("model", log.Model),
-				zap.Int("tokens", totalTokens),
-				zap.Error(err),
+				logger.Int64("userID", log.UserID),
+				logger.String("model", log.Model),
+				logger.Int("tokens", totalTokens),
+				logger.Error(err),
 			)
 		}
 	}
 
 	// 暂时同步写入，在这个阶段确保数据一致性优先
 	if err := s.usageLogRepo.Create(ctx, log); err != nil {
-		s.logger.Error("failed to log request usage", zap.Error(err))
+		s.logger.Error("failed to log request usage", logger.Error(err))
 		return err
 	}
 	return nil

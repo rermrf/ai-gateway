@@ -4,9 +4,8 @@ package provider
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
@@ -29,17 +28,17 @@ type Service interface {
 // service Provider 管理服务实现。
 type service struct {
 	providerRepo repository.ProviderRepository
-	logger       *zap.Logger
+	logger       logger.Logger
 }
 
 // NewService 创建 Provider 管理服务实例。
 func NewService(
 	providerRepo repository.ProviderRepository,
-	logger *zap.Logger,
+	l logger.Logger,
 ) Service {
 	return &service{
 		providerRepo: providerRepo,
-		logger:       logger.Named("service.provider"),
+		logger:       l.With(logger.String("service", "provider")),
 	}
 }
 
@@ -51,24 +50,24 @@ func (s *service) List(ctx context.Context) ([]domain.Provider, error) {
 
 // GetByID 根据ID获取 Provider。
 func (s *service) GetByID(ctx context.Context, id int64) (*domain.Provider, error) {
-	s.logger.Debug("getting provider by id", zap.Int64("id", id))
+	s.logger.Debug("getting provider by id", logger.Int64("id", id))
 	return s.providerRepo.GetByID(ctx, id)
 }
 
 // Create 创建 Provider。
 func (s *service) Create(ctx context.Context, provider *domain.Provider) error {
-	s.logger.Info("creating provider", zap.String("name", provider.Name))
+	s.logger.Info("creating provider", logger.String("name", provider.Name))
 	return s.providerRepo.Create(ctx, provider)
 }
 
 // Update 更新 Provider。
 func (s *service) Update(ctx context.Context, provider *domain.Provider) error {
-	s.logger.Info("updating provider", zap.Int64("id", provider.ID))
+	s.logger.Info("updating provider", logger.Int64("id", provider.ID))
 	return s.providerRepo.Update(ctx, provider)
 }
 
 // Delete 删除 Provider。
 func (s *service) Delete(ctx context.Context, id int64) error {
-	s.logger.Info("deleting provider", zap.Int64("id", id))
+	s.logger.Info("deleting provider", logger.Int64("id", id))
 	return s.providerRepo.Delete(ctx, id)
 }

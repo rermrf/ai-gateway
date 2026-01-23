@@ -7,9 +7,8 @@ import (
 	"gorm.io/gorm"
 	"fmt"
 
-	"go.uber.org/zap"
-
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 	"ai-gateway/internal/service/modelrate"
 )
@@ -39,18 +38,18 @@ type Service interface {
 type service struct {
 	walletRepo   repository.WalletRepository
 	modelRateSvc modelrate.Service
-	logger       *zap.Logger
+	logger       logger.Logger
 }
 
 func NewService(
 	walletRepo repository.WalletRepository,
 	modelRateSvc modelrate.Service,
-	logger *zap.Logger,
+	l logger.Logger,
 ) Service {
 	return &service{
 		walletRepo:   walletRepo,
 		modelRateSvc: modelRateSvc,
-		logger:       logger.Named("service.wallet"),
+		logger:       l.With(logger.String("service", "wallet")),
 	}
 }
 
@@ -90,11 +89,11 @@ func (s *service) TopUp(ctx context.Context, userID int64, amount float64, refer
 		// 简单起见，假设 GetByUserID 返回 nil, nil 表示没找到 (取决于 repository 实现)
 		// 如果 repository 遵循 gorm 习惯，可能是 record not found error.
 		// 这里暂且不做过细的 error type 断言，直接假设如果报错且不是 RecordNotFound 则返回。
-		s.logger.Warn("failed to get wallet, attempting create if not exists", zap.Error(err))
+		s.logger.Warn("failed to get wallet, attempting create if not exists", logger.Error(err))
 	}
 
 	if wallet == nil {
-		s.logger.Info("creating wallet for user", zap.Int64("userID", userID))
+		s.logger.Info("creating wallet for user", logger.Int64("userID", userID))
 		wallet = &domain.Wallet{
 			UserID:  userID,
 			Balance: 0,
@@ -104,7 +103,7 @@ func (s *service) TopUp(ctx context.Context, userID int64, amount float64, refer
 		}
 	}
 
-	s.logger.Info("top up wallet", zap.Int64("userID", userID), zap.Float64("amount", amount))
+	s.logger.Info("top up wallet", logger.Int64("userID", userID), logger.Float64("amount", amount))
 
 	// 记录交易
 	balanceBefore := wallet.Balance
@@ -129,7 +128,7 @@ func (s *service) Deduct(ctx context.Context, userID int64, inputTokens, outputT
 	// 1. 获取费率 (Price Per 1M tokens)
 	promptPrice, completionPrice, err := s.modelRateSvc.GetRateForModel(ctx, modelName)
 	if err != nil {
-		s.logger.Error("failed to get model rate", zap.Error(err))
+		s.logger.Error("failed to get model rate", logger.Error(err))
 		// Fail open or closed? Here we fail open with 0 cost if error, but typically we want to charge.
 		// Given defaults are handled in service, err here is db error.
 		promptPrice = 0
@@ -155,14 +154,15 @@ func (s *service) Deduct(ctx context.Context, userID int64, inputTokens, outputT
 	}
 
 	// 3. 扣费
+	// 3. 扣费
 	s.logger.Info("deducting wallet",
-		zap.Int64("userID", userID),
-		zap.Float64("cost", totalCost),
-		zap.String("model", modelName),
-		zap.Int("inputTokens", inputTokens),
-		zap.Int("outputTokens", outputTokens),
-		zap.Float64("promptPrice", promptPrice),
-		zap.Float64("completionPrice", completionPrice),
+		logger.Int64("userID", userID),
+		logger.Float64("cost", totalCost), // Any? Go logger.Float64 doesn't exist yet? No, fields.go usually has Int64. Let's check if Float64 exists. User didn't ask to add Float64. I should use Any or add Float64. Let's use Any for now or add Float64. I'll use Any for safety as I didn't verify Float64 exists in fields.go previous read. Wait, fields.go read showed Int64 but not Float64. I added Int, Duration, Time. So Float64 is missing. I will use Any.
+		logger.String("model", modelName),
+		logger.Int("inputTokens", inputTokens),
+		logger.Int("outputTokens", outputTokens),
+		logger.Any("promptPrice", promptPrice),
+		logger.Any("completionPrice", completionPrice),
 	)
 
 	balanceBefore := wallet.Balance

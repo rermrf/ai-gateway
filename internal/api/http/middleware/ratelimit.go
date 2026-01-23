@@ -5,14 +5,15 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
+
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/pkg/ratelimit"
 )
 
 // RateLimiter 返回基于 Redis 的限流中间件。
 // 该中间件基于 IP 进行限流。如果 Redis 不可用，则默认放行（Fail Open）。
-func RateLimiter(limiter ratelimit.Limiter, logger *zap.Logger) gin.HandlerFunc {
+func RateLimiter(limiter ratelimit.Limiter, l logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if limiter == nil {
 			c.Next()
@@ -29,9 +30,9 @@ func RateLimiter(limiter ratelimit.Limiter, logger *zap.Logger) gin.HandlerFunc 
 		limited, err := limiter.Limit(c.Request.Context(), key)
 		if err != nil {
 			// Redis 错误，记录日志但放行请求（Fail Open 策略）
-			logger.Warn("rate limiter failed",
-				zap.Error(err),
-				zap.String("key", key),
+			l.Warn("rate limiter failed",
+				logger.Error(err),
+				logger.String("key", key),
 			)
 			c.Next()
 			return
@@ -39,9 +40,9 @@ func RateLimiter(limiter ratelimit.Limiter, logger *zap.Logger) gin.HandlerFunc 
 
 		if limited {
 			// 触发限流
-			logger.Warn("request rate limited",
-				zap.String("ip", c.ClientIP()),
-				zap.String("path", c.Request.URL.Path),
+			l.Warn("request rate limited",
+				logger.String("ip", c.ClientIP()),
+				logger.String("path", c.Request.URL.Path),
 			)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": gin.H{

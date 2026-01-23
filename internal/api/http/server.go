@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
+
 
 	"ai-gateway/config"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/api/http/handler"
 	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/service/apikey"
@@ -20,7 +21,7 @@ import (
 type Server struct {
 	engine *gin.Engine
 	server *http.Server
-	logger *zap.Logger
+	logger logger.Logger
 }
 
 // NewServer 创建一个新的 HTTP 服务器。
@@ -33,7 +34,7 @@ func NewServer(
 	authService *auth.AuthService,
 	apiKeyService apikey.Service,
 	authCfg config.AuthConfig,
-	logger *zap.Logger,
+	l logger.Logger,
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
 
@@ -41,18 +42,18 @@ func NewServer(
 
 	// 全局中间件
 	engine.Use(
-		middleware.Recovery(logger),
-		middleware.Logger(logger),
+		middleware.Recovery(l),
+		middleware.Logger(l),
 		middleware.Cors(),
 		middleware.RequestID(),
 	)
 
 	// 注册路由
-	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, authService, apiKeyService, authCfg, logger)
+	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, authService, apiKeyService, authCfg, l)
 
 	return &Server{
 		engine: engine,
-		logger: logger.Named("http.server"),
+		logger: l.With(logger.String("service", "http.server")),
 	}
 }
 
@@ -65,8 +66,9 @@ func registerRoutes(
 	userHandler *handler.UserHandler,
 	authService *auth.AuthService,
 	apiKeyService apikey.Service,
+
 	authCfg config.AuthConfig,
-	logger *zap.Logger,
+	l logger.Logger,
 ) {
 	// 健康检查（不需要身份验证）
 	engine.GET("/health", func(c *gin.Context) {
@@ -112,7 +114,7 @@ func registerRoutes(
 
 	// OpenAI 兼容 API（使用数据库 API Key 认证）
 	v1 := engine.Group("/v1")
-	v1.Use(middleware.APIKeyAuth(apiKeyService, logger))
+	v1.Use(middleware.APIKeyAuth(apiKeyService, l))
 	{
 		v1.POST("/chat/completions", openaiHandler.ChatCompletions)
 		v1.GET("/models", openaiHandler.ListModels)
@@ -197,7 +199,9 @@ func (s *Server) Start(addr string) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	s.logger.Info("starting http server", zap.String("addr", addr))
+
+
+	s.logger.Info("starting http server", logger.String("addr", addr))
 	return s.server.ListenAndServe()
 }
 
