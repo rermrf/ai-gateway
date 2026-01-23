@@ -56,7 +56,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "注册成功",
+		"message": "注册成功，请等待管理员审核",
 		"data": gin.H{
 			"id":       u.ID,
 			"username": u.Username,
@@ -107,6 +107,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// 检查用户状态
 	if !u.CanLogin() {
+		if u.Status == domain.UserStatusPending {
+			c.JSON(http.StatusForbidden, gin.H{"error": "账号审核中，请联系管理员"})
+			return
+		}
 		c.JSON(http.StatusForbidden, gin.H{"error": "用户已被禁用"})
 		return
 	}

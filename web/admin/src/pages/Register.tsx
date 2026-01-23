@@ -41,7 +41,7 @@ export function Register() {
                 password: formData.password
             })
             // Registration successful, redirect to login
-            navigate('/login', { state: { message: '注册成功，请登录' } })
+            navigate('/login', { state: { message: '注册成功，请等待管理员审核' } })
         } catch (err: any) {
             console.error(err)
             setError(err.response?.data?.error || '注册失败，请稍后重试')

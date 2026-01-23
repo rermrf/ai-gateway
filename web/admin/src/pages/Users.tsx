@@ -157,10 +157,12 @@ export function Users() {
                                                         onChange={e => setEditForm({ ...editForm, status: e.target.value })}
                                                     >
                                                         <option value="active">Active</option>
+                                                        <option value="pending">Pending</option>
                                                         <option value="disabled">Disabled</option>
                                                     </select>
                                                 ) : (
-                                                    <span className={`px-2 py-1 rounded-full text-xs ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                    <span className={`px-2 py-1 rounded-full text-xs ${user.status === 'active' ? 'bg-green-100 text-green-700' :
+                                                        user.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                                                         }`}>
                                                         {user.status}
                                                     </span>

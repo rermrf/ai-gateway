@@ -121,7 +121,7 @@ interface UserResponse {
     username: string
     email: string
     role: 'user' | 'admin'
-    status: 'active' | 'disabled'
+    status: 'active' | 'disabled' | 'pending'
     createdAt: number
 }
 

@@ -1,20 +1,22 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { authApi } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function Login() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { login } = useAuth()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
+    const [successMessage, setSuccessMessage] = useState(location.state?.message || '')
     const [loading, setLoading] = useState(false)
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -64,6 +66,12 @@ export function Login() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {successMessage && (
+                            <Alert className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-900">
+                                <CheckCircle className="h-4 w-4" />
+                                <AlertDescription>{successMessage}</AlertDescription>
+                            </Alert>
+                        )}
                         {error && (
                             <Alert variant="destructive">
                                 <AlertCircle className="h-4 w-4" />

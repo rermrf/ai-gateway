@@ -31,7 +31,7 @@ type User struct {
 	Email        string     `gorm:"uniqueIndex;size:128;not null" json:"email"`
 	PasswordHash string     `gorm:"size:256;not null" json:"-"`
 	Role         UserRole   `gorm:"type:enum('user','admin');default:'user'" json:"role"`
-	Status       UserStatus `gorm:"type:enum('active','disabled');default:'active';index" json:"status"`
+	Status       UserStatus `gorm:"type:enum('active','pending','disabled');default:'pending';index" json:"status"`
 	CreatedAt    time.Time  `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt    time.Time  `gorm:"autoUpdateTime" json:"updatedAt"`
 }

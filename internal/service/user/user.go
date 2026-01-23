@@ -88,7 +88,7 @@ func (s *service) Register(ctx context.Context, username, email, password string
 		Email:        email,
 		PasswordHash: string(hash),
 		Role:         domain.UserRoleUser,
-		Status:       domain.UserStatusActive,
+		Status:       domain.UserStatusPending,
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
