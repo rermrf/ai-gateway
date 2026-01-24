@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/repository/cache"
 	"ai-gateway/internal/repository/dao"
 )
 
@@ -23,12 +24,16 @@ type ProviderRepository interface {
 
 // providerRepository 是 ProviderRepository 的默认实现。
 type providerRepository struct {
-	dao dao.ProviderDAO
+	dao   dao.ProviderDAO
+	cache cache.ProviderCache
 }
 
 // NewProviderRepository 创建一个新的 ProviderRepository。
-func NewProviderRepository(providerDAO dao.ProviderDAO) ProviderRepository {
-	return &providerRepository{dao: providerDAO}
+func NewProviderRepository(providerDAO dao.ProviderDAO, cache cache.ProviderCache) ProviderRepository {
+	return &providerRepository{
+		dao:   providerDAO,
+		cache: cache,
+	}
 }
 
 // toDAO 将 domain.Provider 转换为 dao.Provider
@@ -81,15 +86,27 @@ func (r *providerRepository) Create(ctx context.Context, p *domain.Provider) err
 	p.ID = daoProvider.ID
 	p.CreatedAt = daoProvider.CreatedAt
 	p.UpdatedAt = daoProvider.UpdatedAt
+
+	if r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
 	return nil
 }
 
 func (r *providerRepository) Update(ctx context.Context, p *domain.Provider) error {
-	return r.dao.Update(ctx, r.toDAO(p))
+	err := r.dao.Update(ctx, r.toDAO(p))
+	if err == nil && r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
+	return err
 }
 
 func (r *providerRepository) Delete(ctx context.Context, id int64) error {
-	return r.dao.Delete(ctx, id)
+	err := r.dao.Delete(ctx, id)
+	if err == nil && r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
+	return err
 }
 
 func (r *providerRepository) GetByID(ctx context.Context, id int64) (*domain.Provider, error) {
@@ -109,6 +126,12 @@ func (r *providerRepository) GetByName(ctx context.Context, name string) (*domai
 }
 
 func (r *providerRepository) List(ctx context.Context) ([]domain.Provider, error) {
+	if r.cache != nil {
+		if providers, ok := r.cache.GetAll(ctx); ok {
+			return providers, nil
+		}
+	}
+
 	daoProviders, err := r.dao.List(ctx)
 	if err != nil {
 		return nil, err
@@ -118,6 +141,11 @@ func (r *providerRepository) List(ctx context.Context) ([]domain.Provider, error
 	for i, p := range daoProviders {
 		providers[i] = *r.toDomain(&p)
 	}
+
+	if r.cache != nil {
+		_ = r.cache.SetAll(ctx, providers)
+	}
+
 	return providers, nil
 }
 

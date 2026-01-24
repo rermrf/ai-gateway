@@ -16,6 +16,9 @@ type UsageLog struct {
 	OutputTokens int       `json:"outputTokens"`
 	LatencyMs    int       `json:"latencyMs"`
 	StatusCode   int       `json:"statusCode"`
+	ClientIP     string    `json:"clientIp,omitempty"`
+	UserAgent    string    `json:"userAgent,omitempty"`
+	RequestID    string    `json:"requestId,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
@@ -58,4 +61,14 @@ type DailyUsage struct {
 	Requests     int64  `json:"requests"`
 	InputTokens  int64  `json:"inputTokens"`
 	OutputTokens int64  `json:"outputTokens"`
+}
+
+// UsageLeaderboardEntry 排行榜条目。
+type UsageLeaderboardEntry struct {
+	Dimension    string `json:"dimension"` // user_id, api_key_id, client_ip
+	Value        string `json:"value"`     // 具体值 (User ID, API Key Name/ID, IP)
+	RequestCount int64  `json:"requestCount"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+	TotalTokens  int64  `json:"totalTokens"`
 }

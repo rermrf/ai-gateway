@@ -25,6 +25,8 @@ var (
 	ErrAPIKeyNotFound = errors.New("API Key 不存在")
 	// ErrAPIKeyNotOwned 无权操作此 API Key
 	ErrAPIKeyNotOwned = errors.New("无权操作此 API Key")
+	// ErrAPIKeyQuotaExceeded API Key 额度不足
+	ErrAPIKeyQuotaExceeded = errors.New("API Key 额度不足")
 )
 
 // Service API Key 服务接口。
@@ -35,12 +37,14 @@ type Service interface {
 	ValidateAPIKey(ctx context.Context, key string) (*domain.APIKey, error)
 	// RecordUsage 记录 API key 使用（异步）
 	RecordUsage(ctx context.Context, apiKeyID int64) error
+	// IncrementUsage 增加 API key 使用量
+	IncrementUsage(ctx context.Context, apiKeyID int64, amount float64) error
 
 	// --- 用户级 API Key 管理 ---
 	// ListByUserID 获取指定用户的 API Key 列表
 	ListByUserID(ctx context.Context, userID int64) ([]domain.APIKey, error)
 	// Create 创建 API Key（返回完整密钥）
-	Create(ctx context.Context, userID int64, name string) (*domain.APIKey, string, error)
+	Create(ctx context.Context, userID int64, name string, enabled *bool, quota *float64, expiresAt *time.Time) (*domain.APIKey, string, error)
 	// Delete 删除用户的 API Key（需验证所有权）
 	Delete(ctx context.Context, userID int64, keyID int64) error
 
@@ -108,6 +112,17 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 		return nil, ErrAPIKeyExpired
 	}
 
+	// 检查额度
+	if apiKey.IsQuotaExceeded() {
+		s.logger.Warn("API key quota exceeded",
+			logger.Int64("key_id", apiKey.ID),
+			logger.String("key_prefix", maskAPIKey(key)),
+			logger.Float64("used", apiKey.UsedAmount),
+			logger.Any("quota", apiKey.Quota),
+		)
+		return nil, ErrAPIKeyQuotaExceeded
+	}
+
 	s.logger.Info("API key validated successfully",
 		logger.Int64("key_id", apiKey.ID),
 		logger.Int64("user_id", apiKey.UserID),
@@ -132,6 +147,14 @@ func (s *service) RecordUsage(ctx context.Context, apiKeyID int64) error {
 	}
 
 	return nil
+}
+
+// IncrementUsage 增加 API key 使用量。
+func (s *service) IncrementUsage(ctx context.Context, apiKeyID int64, amount float64) error {
+	if amount <= 0 {
+		return nil
+	}
+	return s.repo.IncrementUsage(ctx, apiKeyID, amount)
 }
 
 // maskAPIKey 遮盖 API key 的大部分内容，仅保留前后几个字符用于日志记录。
@@ -159,7 +182,7 @@ func (s *service) ListByUserID(ctx context.Context, userID int64) ([]domain.APIK
 }
 
 // Create 创建 API Key。
-func (s *service) Create(ctx context.Context, userID int64, name string) (*domain.APIKey, string, error) {
+func (s *service) Create(ctx context.Context, userID int64, name string, enabled *bool, quota *float64, expiresAt *time.Time) (*domain.APIKey, string, error) {
 	// 生成随机 Key
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
@@ -169,12 +192,19 @@ func (s *service) Create(ctx context.Context, userID int64, name string) (*domai
 	hash := sha256.Sum256([]byte(key))
 	keyHash := hex.EncodeToString(hash[:])
 
+	isEnabled := true
+	if enabled != nil {
+		isEnabled = *enabled
+	}
+
 	apiKey := &domain.APIKey{
-		UserID:  userID,
-		Key:     key,
-		KeyHash: keyHash,
-		Name:    name,
-		Enabled: true,
+		UserID:    userID,
+		Key:       key,
+		KeyHash:   keyHash,
+		Name:      name,
+		Enabled:   isEnabled,
+		Quota:     quota,
+		ExpiresAt: expiresAt,
 	}
 
 	if err := s.repo.Create(ctx, apiKey); err != nil {

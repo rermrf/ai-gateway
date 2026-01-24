@@ -9,14 +9,12 @@ import (
 	"strings"
 	"time"
 
-
-
-
 	"ai-gateway/config"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/loadbalancer"
 	"ai-gateway/internal/pkg/logger"
+	"ai-gateway/internal/pkg/retry"
 	"ai-gateway/internal/providers"
 	"ai-gateway/internal/providers/anthropic"
 	"ai-gateway/internal/providers/openai"
@@ -347,7 +345,14 @@ func (g *gatewayService) Chat(ctx context.Context, req *domain.ChatRequest) (*do
 		logger.Any("stream", req.Stream),
 	)
 
-	resp, err := provider.Chat(ctx, req)
+	var resp *domain.ChatResponse
+	err = retry.Do(ctx, retry.DefaultConfig, func() error {
+		var e error
+		resp, e = provider.Chat(ctx, req)
+		// 如果需要，可以在这里决定哪些错误不需要重试
+		return e
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +374,14 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 		logger.String("provider", provider.Name()),
 	)
 
-	ch, err := provider.ChatStream(ctx, req)
+	var ch <-chan domain.StreamDelta
+
+	err = retry.Do(ctx, retry.DefaultConfig, func() error {
+		var e error
+		ch, e = provider.ChatStream(ctx, req)
+		return e
+	})
+
 	if err != nil {
 		return nil, "", err
 	}

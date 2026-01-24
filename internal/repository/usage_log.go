@@ -14,6 +14,10 @@ type UsageLogRepository interface {
 	GetStatsByUserID(ctx context.Context, userID int64) (*domain.UsageStats, error)
 	GetDailyUsageByUserID(ctx context.Context, userID int64, days int) ([]domain.DailyUsage, error)
 	GetGlobalStats(ctx context.Context) (*domain.UsageStats, error)
+	List(ctx context.Context, page, pageSize int, filters map[string]interface{}) ([]*domain.UsageLog, int64, error)
+	GetTopUsers(ctx context.Context, limit, days int) ([]domain.UsageLeaderboardEntry, error)
+	GetTopAPIKeys(ctx context.Context, limit, days int) ([]domain.UsageLeaderboardEntry, error)
+	GetTopClientIPs(ctx context.Context, limit, days int) ([]domain.UsageLeaderboardEntry, error)
 }
 
 // usageLogRepository 是 UsageLogRepository 的默认实现。
@@ -38,6 +42,28 @@ func (r *usageLogRepository) toDAO(log *domain.UsageLog) *dao.UsageLog {
 		OutputTokens: log.OutputTokens,
 		LatencyMs:    log.LatencyMs,
 		StatusCode:   log.StatusCode,
+		ClientIP:     log.ClientIP,
+		UserAgent:    log.UserAgent,
+		RequestID:    log.RequestID,
+		CreatedAt:    log.CreatedAt,
+	}
+}
+
+// toDomain 将 dao.UsageLog 转换为 domain.UsageLog。
+func (r *usageLogRepository) toDomain(log *dao.UsageLog) *domain.UsageLog {
+	return &domain.UsageLog{
+		ID:           log.ID,
+		UserID:       log.UserID,
+		APIKeyID:     log.APIKeyID,
+		Model:        log.Model,
+		Provider:     log.Provider,
+		InputTokens:  log.InputTokens,
+		OutputTokens: log.OutputTokens,
+		LatencyMs:    log.LatencyMs,
+		StatusCode:   log.StatusCode,
+		ClientIP:     log.ClientIP,
+		UserAgent:    log.UserAgent,
+		RequestID:    log.RequestID,
 		CreatedAt:    log.CreatedAt,
 	}
 }
@@ -97,4 +123,57 @@ func (r *usageLogRepository) GetGlobalStats(ctx context.Context) (*domain.UsageS
 		SuccessCount:  daoStats.SuccessCount,
 		ErrorCount:    daoStats.ErrorCount,
 	}, nil
+}
+
+func (r *usageLogRepository) List(ctx context.Context, page, pageSize int, filters map[string]interface{}) ([]*domain.UsageLog, int64, error) {
+	daoLogs, total, err := r.dao.List(ctx, page, pageSize, filters)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	logs := make([]*domain.UsageLog, len(daoLogs))
+	for i, l := range daoLogs {
+		logs[i] = r.toDomain(l)
+	}
+
+	return logs, total, nil
+}
+
+func (r *usageLogRepository) GetTopUsers(ctx context.Context, limit, days int) ([]domain.UsageLeaderboardEntry, error) {
+	daoEntries, err := r.dao.GetTopUsers(ctx, limit, days)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomainLeaderboard(daoEntries, "user_id"), nil
+}
+
+func (r *usageLogRepository) GetTopAPIKeys(ctx context.Context, limit, days int) ([]domain.UsageLeaderboardEntry, error) {
+	daoEntries, err := r.dao.GetTopAPIKeys(ctx, limit, days)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomainLeaderboard(daoEntries, "api_key_id"), nil
+}
+
+func (r *usageLogRepository) GetTopClientIPs(ctx context.Context, limit, days int) ([]domain.UsageLeaderboardEntry, error) {
+	daoEntries, err := r.dao.GetTopClientIPs(ctx, limit, days)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomainLeaderboard(daoEntries, "client_ip"), nil
+}
+
+func (r *usageLogRepository) toDomainLeaderboard(daoEntries []dao.LeaderboardEntry, dimension string) []domain.UsageLeaderboardEntry {
+	entries := make([]domain.UsageLeaderboardEntry, len(daoEntries))
+	for i, e := range daoEntries {
+		entries[i] = domain.UsageLeaderboardEntry{
+			Dimension:    dimension,
+			Value:        e.Value,
+			RequestCount: e.RequestCount,
+			InputTokens:  e.InputTokens,
+			OutputTokens: e.OutputTokens,
+			TotalTokens:  e.InputTokens + e.OutputTokens,
+		}
+	}
+	return entries
 }

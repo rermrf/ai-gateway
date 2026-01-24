@@ -18,6 +18,9 @@ export function ApiKeys({ mode = 'user' }: ApiKeysProps) {
     const [newKey, setNewKey] = useState<string | null>(null)
     const [formData, setFormData] = useState<CreateAPIKeyRequest>({
         name: '',
+        enabled: true,
+        quota: undefined,
+        expiresAt: undefined
     })
 
     const { data: keys, isLoading } = useQuery({
@@ -30,7 +33,7 @@ export function ApiKeys({ mode = 'user' }: ApiKeysProps) {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['api-keys', mode] })
             setNewKey(data.key)
-            setFormData({ name: '' })
+            setFormData({ name: '', enabled: true, quota: undefined, expiresAt: undefined })
         },
     })
 
@@ -105,6 +108,47 @@ export function ApiKeys({ mode = 'user' }: ApiKeysProps) {
                                     required
                                 />
                             </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium">额度限制 (留空为无限)</label>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={formData.quota || ''}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            quota: e.target.value ? parseFloat(e.target.value) : undefined
+                                        })}
+                                        placeholder="例如: 100.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium">过期时间</label>
+                                    <Input
+                                        type="datetime-local"
+                                        value={formData.expiresAt ? new Date(formData.expiresAt).toISOString().slice(0, 16) : ''}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            expiresAt: e.target.value ? new Date(e.target.value).toISOString() : undefined
+                                        })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-medium">启用状态</label>
+                                <input
+                                    type="checkbox"
+                                    checked={formData.enabled ?? true}
+                                    onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+                                    className="h-4 w-4"
+                                />
+                                <span className="text-sm text-muted-foreground">
+                                    {(formData.enabled ?? true) ? '启用' : '禁用'}
+                                </span>
+                            </div>
                             <div className="flex gap-2">
                                 <Button type="submit" disabled={createMutation.isPending}>
                                     <Check className="mr-2 h-4 w-4" />
@@ -137,6 +181,8 @@ export function ApiKeys({ mode = 'user' }: ApiKeysProps) {
                                         <th className="pb-3 font-medium">名称</th>
                                         <th className="pb-3 font-medium">密钥</th>
                                         <th className="pb-3 font-medium">状态</th>
+                                        <th className="pb-3 font-medium">额度使用 (已用 / 总额)</th>
+                                        <th className="pb-3 font-medium">有效期</th>
                                         <th className="pb-3 font-medium">创建时间</th>
                                         <th className="pb-3 font-medium">操作</th>
                                     </tr>
@@ -157,6 +203,21 @@ export function ApiKeys({ mode = 'user' }: ApiKeysProps) {
                                                 >
                                                     {key.enabled ? '有效' : '已禁用'}
                                                 </span>
+                                            </td>
+                                            <td className="py-3 text-sm">
+                                                {key.quota === null ? (
+                                                    <span className="text-green-600">无限</span>
+                                                ) : (
+                                                    <span>
+                                                        {key.usedAmount.toFixed(4)} / {key.quota.toFixed(2)}
+                                                        {key.usedAmount >= key.quota && (
+                                                            <span className="ml-2 text-red-500 text-xs">(已超限)</span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="py-3 text-sm text-muted-foreground">
+                                                {key.expiresAt ? new Date(key.expiresAt).toLocaleString() : '永久有效'}
                                             </td>
                                             <td className="py-3 text-sm text-muted-foreground">
                                                 {new Date(key.createdAt).toLocaleString()}

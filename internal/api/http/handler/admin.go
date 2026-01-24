@@ -743,3 +743,70 @@ func (h *AdminHandler) GetUserWallet(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": wallet})
 }
+
+// --- 审计日志 API ---
+
+// ListUsageLogs 获取审计日志列表。
+func (h *AdminHandler) ListUsageLogs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	filters := make(map[string]interface{})
+	if str := c.Query("userId"); str != "" {
+		if id, err := strconv.ParseInt(str, 10, 64); err == nil {
+			filters["user_id"] = id
+		}
+	}
+	if str := c.Query("apiKeyId"); str != "" {
+		if id, err := strconv.ParseInt(str, 10, 64); err == nil {
+			filters["api_key_id"] = id
+		}
+	}
+	if ip := c.Query("clientIp"); ip != "" {
+		filters["client_ip"] = ip
+	}
+
+	logs, total, err := h.usageSvc.ListLogs(c.Request.Context(), page, pageSize, filters)
+	if err != nil {
+		h.logger.Error("failed to list usage logs", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list usage logs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  logs,
+		"total": total,
+		"page":  page,
+		"size":  pageSize,
+	})
+}
+
+// GetUsageLeaderboard 获取使用量排行榜。
+func (h *AdminHandler) GetUsageLeaderboard(c *gin.Context) {
+	dimension := c.DefaultQuery("dimension", "user_id")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
+
+	if limit > 100 {
+		limit = 100
+	}
+	if days > 365 {
+		days = 365
+	}
+
+	entries, err := h.usageSvc.GetLeaderboard(c.Request.Context(), dimension, limit, days)
+	if err != nil {
+		if err == domain.ErrInvalidParameter {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dimension parameter"})
+			return
+		}
+		h.logger.Error("failed to get leaderboard", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get leaderboard"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": entries})
+}

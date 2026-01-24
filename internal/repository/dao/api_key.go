@@ -16,6 +16,8 @@ type APIKey struct {
 	KeyHash    string     `gorm:"uniqueIndex;size:128;not null" json:"-"`   // Key 的哈希值，用于验证
 	Name       string     `gorm:"size:64;not null" json:"name"`
 	Enabled    bool       `gorm:"default:true;index" json:"enabled"`
+	Quota      *float64   `gorm:"default:null" json:"quota"`   // 额度限制
+	UsedAmount float64    `gorm:"default:0" json:"usedAmount"` // 已使用额度
 	ExpiresAt  *time.Time `gorm:"default:null" json:"expiresAt,omitempty"`
 	LastUsedAt *time.Time `gorm:"default:null" json:"lastUsedAt,omitempty"`
 	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"createdAt"`
@@ -36,6 +38,7 @@ type APIKeyDAO interface {
 	List(ctx context.Context) ([]APIKey, error)
 	ListByUserID(ctx context.Context, userID int64) ([]APIKey, error)
 	UpdateLastUsed(ctx context.Context, id int64) error
+	IncrementUsage(ctx context.Context, id int64, amount float64) error
 }
 
 // GormAPIKeyDAO 是 APIKeyDAO 的 GORM 实现。
@@ -92,6 +95,10 @@ func (d *GormAPIKeyDAO) ListByUserID(ctx context.Context, userID int64) ([]APIKe
 
 func (d *GormAPIKeyDAO) UpdateLastUsed(ctx context.Context, id int64) error {
 	return d.db.WithContext(ctx).Model(&APIKey{}).Where("id = ?", id).Update("last_used_at", time.Now()).Error
+}
+
+func (d *GormAPIKeyDAO) IncrementUsage(ctx context.Context, id int64, amount float64) error {
+	return d.db.WithContext(ctx).Model(&APIKey{}).Where("id = ?", id).Update("used_amount", gorm.Expr("used_amount + ?", amount)).Error
 }
 
 var _ APIKeyDAO = (*GormAPIKeyDAO)(nil)

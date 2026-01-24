@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/repository/cache"
 	"ai-gateway/internal/repository/dao"
 )
 
@@ -21,12 +22,16 @@ type RoutingRuleRepository interface {
 
 // routingRuleRepository 是 RoutingRuleRepository 的默认实现。
 type routingRuleRepository struct {
-	dao dao.RoutingRuleDAO
+	dao   dao.RoutingRuleDAO
+	cache cache.RoutingRuleCache
 }
 
 // NewRoutingRuleRepository 创建一个新的 RoutingRuleRepository。
-func NewRoutingRuleRepository(routingRuleDAO dao.RoutingRuleDAO) RoutingRuleRepository {
-	return &routingRuleRepository{dao: routingRuleDAO}
+func NewRoutingRuleRepository(routingRuleDAO dao.RoutingRuleDAO, cache cache.RoutingRuleCache) RoutingRuleRepository {
+	return &routingRuleRepository{
+		dao:   routingRuleDAO,
+		cache: cache,
+	}
 }
 
 // toDAO 将 domain.RoutingRule 转换为 dao.RoutingRule
@@ -70,15 +75,28 @@ func (r *routingRuleRepository) Create(ctx context.Context, rule *domain.Routing
 	rule.ID = daoRule.ID
 	rule.CreatedAt = daoRule.CreatedAt
 	rule.UpdatedAt = daoRule.UpdatedAt
+	rule.UpdatedAt = daoRule.UpdatedAt
+
+	if r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
 	return nil
 }
 
 func (r *routingRuleRepository) Update(ctx context.Context, rule *domain.RoutingRule) error {
-	return r.dao.Update(ctx, r.toDAO(rule))
+	err := r.dao.Update(ctx, r.toDAO(rule))
+	if err == nil && r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
+	return err
 }
 
 func (r *routingRuleRepository) Delete(ctx context.Context, id int64) error {
-	return r.dao.Delete(ctx, id)
+	err := r.dao.Delete(ctx, id)
+	if err == nil && r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
+	return err
 }
 
 func (r *routingRuleRepository) GetByID(ctx context.Context, id int64) (*domain.RoutingRule, error) {
@@ -90,6 +108,12 @@ func (r *routingRuleRepository) GetByID(ctx context.Context, id int64) (*domain.
 }
 
 func (r *routingRuleRepository) List(ctx context.Context) ([]domain.RoutingRule, error) {
+	if r.cache != nil {
+		if rules, ok := r.cache.GetAll(ctx); ok {
+			return rules, nil
+		}
+	}
+
 	daoRules, err := r.dao.List(ctx)
 	if err != nil {
 		return nil, err

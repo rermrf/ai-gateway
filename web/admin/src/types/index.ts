@@ -70,12 +70,16 @@ export interface APIKey {
     key: string
     name: string
     enabled: boolean
+    quota: number | null
+    usedAmount: number
     createdAt: string
     expiresAt?: string
 }
 
 export interface CreateAPIKeyRequest {
     name: string
+    enabled?: boolean
+    quota?: number
     expiresAt?: string
 }
 
@@ -194,4 +198,29 @@ export interface WalletTransaction {
 
 export interface TopUpRequest {
     amount: number
+}
+
+// ========== Audit Logs ==========
+
+export interface UsageLog {
+    id: number
+    userId: number
+    apiKeyId?: number
+    model: string
+    provider: string
+    inputTokens: number
+    outputTokens: number
+    latencyMs: number
+    statusCode: number
+    clientIp?: string
+    userAgent?: string
+    requestId?: string
+    createdAt: string
+}
+
+export interface PaginatedResponse<T> {
+    data: T[]
+    total: number
+    page: number
+    size: number
 }

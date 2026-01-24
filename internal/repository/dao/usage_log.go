@@ -19,6 +19,9 @@ type UsageLog struct {
 	OutputTokens int       `gorm:"default:0" json:"outputTokens"`
 	LatencyMs    int       `gorm:"" json:"latencyMs"`
 	StatusCode   int       `gorm:"" json:"statusCode"`
+	ClientIP     string    `gorm:"size:45;index" json:"clientIp"`
+	UserAgent    string    `gorm:"size:512" json:"userAgent"`
+	RequestID    string    `gorm:"size:64" json:"requestId"`
 	CreatedAt    time.Time `gorm:"autoCreateTime;index" json:"createdAt"`
 }
 
@@ -45,12 +48,25 @@ type DailyUsage struct {
 	OutputTokens int64  `json:"outputTokens"`
 }
 
+// LeaderboardEntry 排行榜条目 (DAO)。
+type LeaderboardEntry struct {
+	Value        string `json:"value"`
+	RequestCount int64  `json:"requestCount"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+}
+
 // UsageLogDAO 定义使用记录的数据访问操作。
 type UsageLogDAO interface {
 	Create(ctx context.Context, log *UsageLog) error
 	GetStatsByUserID(ctx context.Context, userID int64) (*UsageStats, error)
 	GetDailyUsageByUserID(ctx context.Context, userID int64, days int) ([]DailyUsage, error)
+
 	GetGlobalStats(ctx context.Context) (*UsageStats, error)
+	List(ctx context.Context, page, pageSize int, filters map[string]interface{}) ([]*UsageLog, int64, error)
+	GetTopUsers(ctx context.Context, limit, days int) ([]LeaderboardEntry, error)
+	GetTopAPIKeys(ctx context.Context, limit, days int) ([]LeaderboardEntry, error)
+	GetTopClientIPs(ctx context.Context, limit, days int) ([]LeaderboardEntry, error)
 }
 
 // GormUsageLogDAO 是 UsageLogDAO 的 GORM 实现。
@@ -112,6 +128,85 @@ func (d *GormUsageLogDAO) GetGlobalStats(ctx context.Context) (*UsageStats, erro
 		`).
 		Scan(&stats).Error
 	return &stats, err
+}
+
+func (d *GormUsageLogDAO) List(ctx context.Context, page, pageSize int, filters map[string]interface{}) ([]*UsageLog, int64, error) {
+	var logs []*UsageLog
+	var total int64
+
+	query := d.db.WithContext(ctx).Model(&UsageLog{})
+
+	if userID, ok := filters["user_id"]; ok && userID != nil {
+		query = query.Where("user_id = ?", userID)
+	}
+	if clientIP, ok := filters["client_ip"]; ok && clientIP != "" {
+		query = query.Where("client_ip = ?", clientIP)
+	}
+	if apiKeyID, ok := filters["api_key_id"]; ok && apiKeyID != nil {
+		query = query.Where("api_key_id = ?", apiKeyID)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Order("created_at DESC").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&logs).Error
+
+	return logs, total, err
+}
+
+func (d *GormUsageLogDAO) GetTopUsers(ctx context.Context, limit, days int) ([]LeaderboardEntry, error) {
+	var entries []LeaderboardEntry
+	err := d.db.WithContext(ctx).Model(&UsageLog{}).
+		Select(`
+			CAST(user_id AS CHAR) as value,
+			COUNT(*) as request_count,
+			CAST(COALESCE(SUM(input_tokens), 0) AS UNSIGNED) as input_tokens,
+			CAST(COALESCE(SUM(output_tokens), 0) AS UNSIGNED) as output_tokens
+		`).
+		Where("created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)", days).
+		Group("user_id").
+		Order("request_count DESC").
+		Limit(limit).
+		Scan(&entries).Error
+	return entries, err
+}
+
+func (d *GormUsageLogDAO) GetTopAPIKeys(ctx context.Context, limit, days int) ([]LeaderboardEntry, error) {
+	var entries []LeaderboardEntry
+	err := d.db.WithContext(ctx).Model(&UsageLog{}).
+		Select(`
+			CAST(api_key_id AS CHAR) as value,
+			COUNT(*) as request_count,
+			CAST(COALESCE(SUM(input_tokens), 0) AS UNSIGNED) as input_tokens,
+			CAST(COALESCE(SUM(output_tokens), 0) AS UNSIGNED) as output_tokens
+		`).
+		Where("created_at >= DATE_SUB(NOW(), INTERVAL ? DAY) AND api_key_id IS NOT NULL", days).
+		Group("api_key_id").
+		Order("request_count DESC").
+		Limit(limit).
+		Scan(&entries).Error
+	return entries, err
+}
+
+func (d *GormUsageLogDAO) GetTopClientIPs(ctx context.Context, limit, days int) ([]LeaderboardEntry, error) {
+	var entries []LeaderboardEntry
+	err := d.db.WithContext(ctx).Model(&UsageLog{}).
+		Select(`
+			client_ip as value,
+			COUNT(*) as request_count,
+			CAST(COALESCE(SUM(input_tokens), 0) AS UNSIGNED) as input_tokens,
+			CAST(COALESCE(SUM(output_tokens), 0) AS UNSIGNED) as output_tokens
+		`).
+		Where("created_at >= DATE_SUB(NOW(), INTERVAL ? DAY) AND client_ip != ''", days).
+		Group("client_ip").
+		Order("request_count DESC").
+		Limit(limit).
+		Scan(&entries).Error
+	return entries, err
 }
 
 var _ UsageLogDAO = (*GormUsageLogDAO)(nil)

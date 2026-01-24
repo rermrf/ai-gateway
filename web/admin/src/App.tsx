@@ -13,6 +13,10 @@ import { Login } from '@/pages/Login'
 import { Register } from '@/pages/Register'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { Users } from '@/pages/Users'
+import { AuditLogs } from '@/pages/AuditLogs'
+import { UsageLeaderboard } from '@/pages/UsageLeaderboard'
+
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -111,6 +115,22 @@ function App() {
               <RequireAuth roles={['admin']}>
                 <Layout>
                   <Users />
+                </Layout>
+              </RequireAuth>
+            } />
+
+            <Route path="/admin/audit-logs" element={
+              <RequireAuth roles={['admin']}>
+                <Layout>
+                  <AuditLogs />
+                </Layout>
+              </RequireAuth>
+            } />
+
+            <Route path="/admin/leaderboard" element={
+              <RequireAuth roles={['admin']}>
+                <Layout>
+                  <UsageLeaderboard />
                 </Layout>
               </RequireAuth>
             } />

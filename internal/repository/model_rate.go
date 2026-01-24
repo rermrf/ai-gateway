@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/repository/cache"
 	"ai-gateway/internal/repository/dao"
 )
 
@@ -18,11 +19,15 @@ type ModelRateRepository interface {
 }
 
 type modelRateRepository struct {
-	dao dao.ModelRateDAO
+	dao   dao.ModelRateDAO
+	cache cache.ModelRateCache
 }
 
-func NewModelRateRepository(dao dao.ModelRateDAO) ModelRateRepository {
-	return &modelRateRepository{dao: dao}
+func NewModelRateRepository(dao dao.ModelRateDAO, cache cache.ModelRateCache) ModelRateRepository {
+	return &modelRateRepository{
+		dao:   dao,
+		cache: cache,
+	}
 }
 
 func (r *modelRateRepository) toDomain(daoRate *dao.ModelRate) *domain.ModelRate {
@@ -63,15 +68,28 @@ func (r *modelRateRepository) Create(ctx context.Context, rate *domain.ModelRate
 	rate.ID = daoRate.ID
 	rate.CreatedAt = daoRate.CreatedAt
 	rate.UpdatedAt = daoRate.UpdatedAt
+	rate.UpdatedAt = daoRate.UpdatedAt
+
+	if r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
 	return nil
 }
 
 func (r *modelRateRepository) Update(ctx context.Context, rate *domain.ModelRate) error {
-	return r.dao.Update(ctx, r.toDAO(rate))
+	err := r.dao.Update(ctx, r.toDAO(rate))
+	if err == nil && r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
+	return err
 }
 
 func (r *modelRateRepository) Delete(ctx context.Context, id int64) error {
-	return r.dao.Delete(ctx, id)
+	err := r.dao.Delete(ctx, id)
+	if err == nil && r.cache != nil {
+		_ = r.cache.Invalidate(ctx)
+	}
+	return err
 }
 
 func (r *modelRateRepository) GetByID(ctx context.Context, id int64) (*domain.ModelRate, error) {
@@ -95,6 +113,12 @@ func (r *modelRateRepository) List(ctx context.Context) ([]domain.ModelRate, err
 }
 
 func (r *modelRateRepository) GetAllEnabled(ctx context.Context) ([]domain.ModelRate, error) {
+	if r.cache != nil {
+		if rates, ok := r.cache.GetAllEnabled(ctx); ok {
+			return rates, nil
+		}
+	}
+
 	daoRates, err := r.dao.GetAllEnabled(ctx)
 	if err != nil {
 		return nil, err

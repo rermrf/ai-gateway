@@ -11,30 +11,43 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ai-gateway/internal/converter"
-	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
+	"ai-gateway/internal/service/apikey"
 	gatewaysvc "ai-gateway/internal/service/gateway"
+	"ai-gateway/internal/service/modelrate"
 	"ai-gateway/internal/service/usage"
 	"ai-gateway/internal/service/wallet"
 )
 
 // OpenAIHandler 处理 OpenAI 兼容的 API 请求。
 type OpenAIHandler struct {
-	gw        gatewaysvc.GatewayService
-	walletSvc wallet.Service
-	usageSvc  usage.Service
-	converter *converter.OpenAIConverter
-	logger    logger.Logger
+	gw           gatewaysvc.GatewayService
+	walletSvc    wallet.Service
+	usageSvc     usage.Service
+	apiKeySvc    apikey.Service
+	modelRateSvc modelrate.Service
+	converter    *converter.OpenAIConverter
+	logger       logger.Logger
 }
 
 // NewOpenAIHandler 创建一个新的 OpenAI 处理器。
-func NewOpenAIHandler(gatewayService gatewaysvc.GatewayService, walletSvc wallet.Service, usageSvc usage.Service, l logger.Logger) *OpenAIHandler {
+func NewOpenAIHandler(
+	gatewayService gatewaysvc.GatewayService,
+	walletSvc wallet.Service,
+	usageSvc usage.Service,
+	apiKeySvc apikey.Service,
+	modelRateSvc modelrate.Service,
+	l logger.Logger,
+) *OpenAIHandler {
 	return &OpenAIHandler{
-		gw:        gatewayService,
-		walletSvc: walletSvc,
-		usageSvc:  usageSvc,
-		converter: converter.NewOpenAIConverter(),
-		logger:    l.With(logger.String("handler", "openai")),
+		gw:           gatewayService,
+		walletSvc:    walletSvc,
+		usageSvc:     usageSvc,
+		apiKeySvc:    apiKeySvc,
+		modelRateSvc: modelRateSvc,
+		converter:    converter.NewOpenAIConverter(),
+		logger:       l.With(logger.String("handler", "openai")),
 	}
 }
 
@@ -252,13 +265,44 @@ func (h *OpenAIHandler) logUsage(c *gin.Context, model, provider string, inputTo
 		OutputTokens: outputTokens,
 		LatencyMs:    latency,
 		StatusCode:   statusCode,
+		ClientIP:     c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+		RequestID:    c.GetString("request_id"), // Middleware should set this
+	}
+
+	// Try to get X-Request-ID if not in context
+	if log.RequestID == "" {
+		log.RequestID = c.GetHeader("X-Request-ID")
 	}
 
 	// 异步记录
 
+	// 异步记录
 	go func() {
+		// 1. 记录 Usage Log (DB)
 		if err := h.usageSvc.LogRequest(context.Background(), log); err != nil {
 			h.logger.Error("failed to log usage", logger.Error(err))
+		}
+
+		// 2. 如果使用 API Key，增加已用额度
+		if akIDPtr != nil {
+			// 计算本次费用 (如果 Quota 是按金额) 或者 Token (如果 Quota 是按 Token)
+			// 这里假设 Quota 是金额 (因为 decimal(15,6))
+			// 需要 ModelRateService
+			cost := 0.0
+			promptPrice, completionPrice, err := h.modelRateSvc.GetRateForModel(context.Background(), model)
+			if err == nil {
+				cost = (float64(inputTokens)/1000000.0)*promptPrice + (float64(outputTokens)/1000000.0)*completionPrice
+			} else {
+				// 如果找不到费率，可能不需要计费，或者记录 0
+				h.logger.Warn("failed to get model rate for api key usage", logger.String("model", model), logger.Error(err))
+			}
+
+			if cost > 0 {
+				if err := h.apiKeySvc.IncrementUsage(context.Background(), *akIDPtr, cost); err != nil {
+					h.logger.Error("failed to increment api key usage", logger.Error(err), logger.Int64("key_id", *akIDPtr))
+				}
+			}
 		}
 	}()
 }
@@ -292,4 +336,3 @@ func (h *OpenAIHandler) ListModels(c *gin.Context) {
 		"data":   data,
 	})
 }
-

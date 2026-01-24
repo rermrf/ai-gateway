@@ -4,12 +4,13 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"ai-gateway/internal/api/http/middleware"
-	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/modelrate"
@@ -168,7 +169,10 @@ func (h *UserHandler) ListMyAPIKeys(c *gin.Context) {
 
 // CreateAPIKeyRequest 创建 API Key 请求。
 type CreateAPIKeyRequest struct {
-	Name string `json:"name" binding:"required"`
+	Name      string     `json:"name" binding:"required"`
+	Enabled   *bool      `json:"enabled"`
+	Quota     *float64   `json:"quota"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 // CreateMyAPIKey 创建 API Key。
@@ -180,7 +184,7 @@ func (h *UserHandler) CreateMyAPIKey(c *gin.Context) {
 		return
 	}
 
-	apiKey, fullKey, err := h.apiKeySvc.Create(c.Request.Context(), userID, req.Name)
+	apiKey, fullKey, err := h.apiKeySvc.Create(c.Request.Context(), userID, req.Name, req.Enabled, req.Quota, req.ExpiresAt)
 	if err != nil {
 		h.handleError(c, err)
 		return

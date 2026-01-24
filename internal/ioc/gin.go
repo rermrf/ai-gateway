@@ -6,9 +6,11 @@ import (
 
 	"ai-gateway/config"
 	httpapi "ai-gateway/internal/api/http"
-	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/api/http/handler"
+	"ai-gateway/internal/pkg/logger"
+	"ai-gateway/internal/pkg/ratelimit"
 	"ai-gateway/internal/repository"
+	"ai-gateway/internal/repository/cache"
 	"ai-gateway/internal/repository/dao"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/auth"
@@ -31,6 +33,20 @@ func InitGinServer(cfg *config.Config, l logger.Logger) *httpapi.Server {
 		panic(err)
 	}
 
+	// 初始化 Redis
+	rdb, err := InitRedis(cfg, l)
+	if err != nil {
+		l.Error("failed to initialize redis", logger.Error(err))
+		panic(err)
+	}
+
+	// 初始化限流器 (1000 请求/分钟)
+	// 如果 Redis 未初始化 (rdb == nil)，限流器将为 nil，中间件会自动处理
+	var limiter ratelimit.Limiter
+	if rdb != nil {
+		limiter = ratelimit.NewRedisSlidingWindowLimiter(rdb, time.Minute, 1000)
+	}
+
 	// 初始化 DAOs
 	providerDAO := dao.NewGormProviderDAO(db)
 	routingRuleDAO := dao.NewGormRoutingRuleDAO(db)
@@ -41,15 +57,29 @@ func InitGinServer(cfg *config.Config, l logger.Logger) *httpapi.Server {
 	walletDAO := dao.NewGormWalletDAO(db)
 	modelRateDAO := dao.NewGormModelRateDAO(db)
 
+	// 初始化缓存
+	// 初始化缓存
+	var apiKeyCache cache.APIKeyCache
+	var providerCache cache.ProviderCache
+	var routingRuleCache cache.RoutingRuleCache
+	var modelRateCache cache.ModelRateCache
+
+	if rdb != nil {
+		apiKeyCache = cache.NewRedisAPIKeyCache(rdb)
+		providerCache = cache.NewRedisProviderCache(rdb)
+		routingRuleCache = cache.NewRedisRoutingRuleCache(rdb)
+		modelRateCache = cache.NewRedisModelRateCache(rdb)
+	}
+
 	// 初始化仓库 (Repositories)
-	providerRepo := repository.NewProviderRepository(providerDAO)
-	routingRuleRepo := repository.NewRoutingRuleRepository(routingRuleDAO)
-	apiKeyRepo := repository.NewAPIKeyRepository(apiKeyDAO)
+	providerRepo := repository.NewProviderRepository(providerDAO, providerCache)
+	routingRuleRepo := repository.NewRoutingRuleRepository(routingRuleDAO, routingRuleCache)
+	apiKeyRepo := repository.NewAPIKeyRepository(apiKeyDAO, apiKeyCache)
 	loadBalanceRepo := repository.NewLoadBalanceRepository(loadBalanceDAO)
 	userRepo := repository.NewUserRepository(userDAO)
 	usageLogRepo := repository.NewUsageLogRepository(usageLogDAO)
 	walletRepo := repository.NewWalletRepository(walletDAO)
-	modelRateRepo := repository.NewModelRateRepository(modelRateDAO)
+	modelRateRepo := repository.NewModelRateRepository(modelRateDAO, modelRateCache)
 
 	// 初始化认证服务
 	jwtSecret := cfg.Auth.JWTSecret
@@ -87,7 +117,7 @@ func InitGinServer(cfg *config.Config, l logger.Logger) *httpapi.Server {
 	)
 
 	// 初始化处理器
-	openaiHandler := handler.NewOpenAIHandler(gw, walletSvc, usageSvc, l)
+	openaiHandler := handler.NewOpenAIHandler(gw, walletSvc, usageSvc, apiKeySvc, modelRateSvc, l)
 	anthropicHandler := handler.NewAnthropicHandler(gw, walletSvc, usageSvc, l)
 	authHandler := handler.NewAuthHandler(userSvc, authService, l)
 	userHandler := handler.NewUserHandler(userSvc, apiKeySvc, walletSvc, gw, modelRateSvc, l)
@@ -104,6 +134,8 @@ func InitGinServer(cfg *config.Config, l logger.Logger) *httpapi.Server {
 		l,
 	)
 
+	healthHandler := handler.NewHealthHandler(db, rdb, l)
+
 	// 创建并返回带有身份验证配置的服务器
 	return httpapi.NewServer(
 		openaiHandler,
@@ -111,8 +143,10 @@ func InitGinServer(cfg *config.Config, l logger.Logger) *httpapi.Server {
 		adminHandler,
 		authHandler,
 		userHandler,
+		healthHandler,
 		authService,
 		apiKeySvc,
+		limiter,
 		cfg.Auth,
 		l,
 	)

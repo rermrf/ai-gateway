@@ -8,11 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-
 	"ai-gateway/config"
-	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/api/http/handler"
 	"ai-gateway/internal/api/http/middleware"
+	"ai-gateway/internal/pkg/logger"
+	"ai-gateway/internal/pkg/ratelimit"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/auth"
 )
@@ -31,8 +31,10 @@ func NewServer(
 	adminHandler *handler.AdminHandler,
 	authHandler *handler.AuthHandler,
 	userHandler *handler.UserHandler,
+	healthHandler *handler.HealthHandler,
 	authService *auth.AuthService,
 	apiKeyService apikey.Service,
+	limiter ratelimit.Limiter,
 	authCfg config.AuthConfig,
 	l logger.Logger,
 ) *Server {
@@ -46,10 +48,11 @@ func NewServer(
 		middleware.Logger(l),
 		middleware.Cors(),
 		middleware.RequestID(),
+		middleware.RateLimiter(limiter, l),
 	)
 
 	// 注册路由
-	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, authService, apiKeyService, authCfg, l)
+	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, healthHandler, authService, apiKeyService, authCfg, l)
 
 	return &Server{
 		engine: engine,
@@ -64,6 +67,7 @@ func registerRoutes(
 	adminHandler *handler.AdminHandler,
 	authHandler *handler.AuthHandler,
 	userHandler *handler.UserHandler,
+	healthHandler *handler.HealthHandler,
 	authService *auth.AuthService,
 	apiKeyService apikey.Service,
 
@@ -71,12 +75,10 @@ func registerRoutes(
 	l logger.Logger,
 ) {
 	// 健康检查（不需要身份验证）
-	engine.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-			"time":   time.Now().Format(time.RFC3339),
-		})
-	})
+	engine.GET("/health/live", healthHandler.LivenessCheck)
+	engine.GET("/health/ready", healthHandler.ReadinessCheck)
+	// 兼容旧的 health 接口
+	engine.GET("/health", healthHandler.LivenessCheck)
 
 	// 认证 API（公开）
 	authGroup := engine.Group("/api/auth")
@@ -172,6 +174,12 @@ func registerRoutes(
 
 		// 全局使用统计
 		adminGroup.GET("/usage/global", adminHandler.GetGlobalUsage)
+
+		// 审计日志列表
+		adminGroup.GET("/usage-logs", adminHandler.ListUsageLogs)
+
+		// 使用量排行榜
+		adminGroup.GET("/usage/leaderboard", adminHandler.GetUsageLeaderboard)
 	}
 
 	// 静态文件服务（生产模式下托管前端）
@@ -198,8 +206,6 @@ func (s *Server) Start(addr string) error {
 		WriteTimeout: 120 * time.Second, // 针对流式传输的长超时时间
 		IdleTimeout:  60 * time.Second,
 	}
-
-
 
 	s.logger.Info("starting http server", logger.String("addr", addr))
 	return s.server.ListenAndServe()

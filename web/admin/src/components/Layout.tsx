@@ -10,7 +10,9 @@ import {
     Zap,
     Users,
     LogOut,
-    User
+    User,
+    Shield,
+    Trophy
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -29,6 +31,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { path: '/api-keys', label: '我的密钥', icon: Key, roles: ['admin', 'user'] },
         { path: '/admin/api-keys', label: '系统密钥', icon: Key, roles: ['admin'] },
         { path: '/admin/users', label: '用户管理', icon: Users, roles: ['admin'] },
+        { path: '/admin/audit-logs', label: '审计日志', icon: Shield, roles: ['admin'] },
+        { path: '/admin/leaderboard', label: '排行榜', icon: Trophy, roles: ['admin'] },
         { path: '/settings', label: '设置', icon: Settings, roles: ['admin', 'user'] },
     ]
 

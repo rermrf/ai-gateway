@@ -20,6 +20,10 @@ type Service interface {
 	GetGlobalDailyUsage(ctx context.Context, days int) ([]domain.DailyUsage, error)
 	// LogRequest 记录请求使用情况
 	LogRequest(ctx context.Context, log *domain.UsageLog) error
+	// ListLogs 获取日志列表
+	ListLogs(ctx context.Context, page, pageSize int, filters map[string]interface{}) ([]*domain.UsageLog, int64, error)
+	// GetLeaderboard 获取使用量排行榜
+	GetLeaderboard(ctx context.Context, dimension string, limit, days int) ([]domain.UsageLeaderboardEntry, error)
 }
 
 // service 使用统计服务实现。
@@ -58,7 +62,6 @@ func (s *service) GetGlobalStats(ctx context.Context) (*domain.UsageStats, error
 // GetGlobalDailyUsage 获取全局每日使用统计。
 func (s *service) GetGlobalDailyUsage(ctx context.Context, days int) ([]domain.DailyUsage, error) {
 	s.logger.Debug("getting global daily usage", logger.Int("days", days))
-
 
 	// TODO: 需要在 repository 层添加 GetGlobalDailyUsage 方法
 	// 目前可以返回空切片或实现一个聚合逻辑
@@ -99,4 +102,23 @@ func (s *service) LogRequest(ctx context.Context, log *domain.UsageLog) error {
 		return err
 	}
 	return nil
+}
+
+// ListLogs 获取日志列表。
+func (s *service) ListLogs(ctx context.Context, page, pageSize int, filters map[string]interface{}) ([]*domain.UsageLog, int64, error) {
+	return s.usageLogRepo.List(ctx, page, pageSize, filters)
+}
+
+// GetLeaderboard 获取使用量排行榜。
+func (s *service) GetLeaderboard(ctx context.Context, dimension string, limit, days int) ([]domain.UsageLeaderboardEntry, error) {
+	switch dimension {
+	case "user_id":
+		return s.usageLogRepo.GetTopUsers(ctx, limit, days)
+	case "api_key_id":
+		return s.usageLogRepo.GetTopAPIKeys(ctx, limit, days)
+	case "client_ip":
+		return s.usageLogRepo.GetTopClientIPs(ctx, limit, days)
+	default:
+		return nil, domain.ErrInvalidParameter
+	}
 }
