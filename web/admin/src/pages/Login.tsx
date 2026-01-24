@@ -16,7 +16,7 @@ export function Login() {
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
-    const [successMessage, setSuccessMessage] = useState(location.state?.message || '')
+    const [successMessage] = useState(location.state?.message || '')
     const [loading, setLoading] = useState(false)
 
     const handleSubmit = async (e: React.FormEvent) => {

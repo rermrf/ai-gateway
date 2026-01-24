@@ -42,6 +42,19 @@ clean:
 gen:
 	@go generate ./...
 
+# Docker 构建
+docker-build:
+	docker build -t ai-gateway:latest .
+
+# Docker 运行 (使用 compose)
+docker-up:
+	docker-compose up -d
+
+# Docker 停止
+docker-down:
+	docker-compose down
+
+
 # 帮助
 help:
 	@echo "可用目标："
@@ -54,3 +67,6 @@ help:
 	@echo "  run-config - 使用配置文件运行服务器"
 	@echo "  build      - 编译二进制文件"
 	@echo "  clean      - 清理构建产物"
+	@echo "  docker-build - 构建 Docker 镜像"
+	@echo "  docker-up    - 启动 Docker 服务"
+	@echo "  docker-down  - 停止 Docker 服务"
