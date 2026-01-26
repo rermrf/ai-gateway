@@ -11,7 +11,7 @@ import (
 
 // Service 负载均衡管理服务接口。
 //
-//go:generate mockgen -source=./loadbalance.go -destination=./mocks/loadbalance.mock.go -package=loadbalancemocks -typed Service
+//go:generate mockgen -source=./loadbalance.go -destination=./mocks/loadbalance.mock.go -package=loadbalancemocks Service
 type Service interface {
 	// ListGroups 获取所有负载均衡组
 	ListGroups(ctx context.Context) ([]domain.LoadBalanceGroup, error)

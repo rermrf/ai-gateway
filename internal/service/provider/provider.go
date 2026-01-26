@@ -11,7 +11,7 @@ import (
 
 // Service Provider 管理服务接口。
 //
-//go:generate mockgen -source=./provider.go -destination=./mocks/provider.mock.go -package=providermocks -typed Service
+//go:generate mockgen -source=./provider.go -destination=./mocks/provider.mock.go -package=providermocks Service
 type Service interface {
 	// List 获取所有 Provider
 	List(ctx context.Context) ([]domain.Provider, error)

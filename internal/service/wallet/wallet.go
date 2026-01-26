@@ -3,24 +3,20 @@ package wallet
 import (
 	"context"
 	"errors"
-
-	"gorm.io/gorm"
 	"fmt"
 
+	"gorm.io/gorm"
+
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 	"ai-gateway/internal/service/modelrate"
 )
 
-var (
-	ErrInsufficientBalance = errors.New("insufficient balance")
-	ErrWalletNotFound      = errors.New("wallet not found")
-)
-
 // Service 钱包服务接口
 //
-//go:generate mockgen -source=./wallet.go -destination=./mocks/wallet.mock.go -package=walletmocks -typed Service
+//go:generate mockgen -source=./wallet.go -destination=./mocks/wallet.mock.go -package=walletmocks Service
 type Service interface {
 	GetBalance(ctx context.Context, userID int64) (*domain.Wallet, error)
 	GetTransactions(ctx context.Context, userID int64, page, size int) ([]domain.WalletTransaction, int64, error)
@@ -73,7 +69,7 @@ func (s *service) GetTransactions(ctx context.Context, userID int64, page, size 
 		return nil, 0, err
 	}
 	if wallet == nil {
-		return nil, 0, ErrWalletNotFound
+		return nil, 0, errs.ErrWalletNotFound
 	}
 
 	offset := (page - 1) * size
@@ -150,7 +146,7 @@ func (s *service) Deduct(ctx context.Context, userID int64, inputTokens, outputT
 		return err
 	}
 	if wallet == nil {
-		return ErrWalletNotFound
+		return errs.ErrWalletNotFound
 	}
 
 	// 3. 扣费

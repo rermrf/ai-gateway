@@ -11,7 +11,7 @@ import (
 
 // Service 路由规则管理服务接口。
 //
-//go:generate mockgen -source=./routingrule.go -destination=./mocks/routingrule.mock.go -package=routingrulemocks -typed Service
+//go:generate mockgen -source=./routingrule.go -destination=./mocks/routingrule.mock.go -package=routingrulemocks Service
 type Service interface {
 	// List 获取所有路由规则
 	List(ctx context.Context) ([]domain.RoutingRule, error)

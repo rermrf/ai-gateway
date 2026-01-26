@@ -10,7 +10,7 @@ import (
 
 // Service 模型费率服务接口
 //
-//go:generate mockgen -source=./modelrate.go -destination=./mocks/modelrate.mock.go -package=modelratemocks -typed Service
+//go:generate mockgen -source=./modelrate.go -destination=./mocks/modelrate.mock.go -package=modelratemocks Service
 type Service interface {
 	Create(ctx context.Context, rate *domain.ModelRate) error
 	Update(ctx context.Context, rate *domain.ModelRate) error

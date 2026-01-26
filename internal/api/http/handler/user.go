@@ -10,6 +10,7 @@ import (
 
 	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
@@ -308,15 +309,15 @@ func (h *UserHandler) handleError(c *gin.Context, err error) {
 	h.logger.Warn("request failed", logger.Error(err))
 
 	switch err {
-	case user.ErrUserNotFound:
+	case errs.ErrUserNotFound:
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case user.ErrUserAlreadyExists, user.ErrEmailAlreadyExists:
+	case errs.ErrUserAlreadyExists, errs.ErrEmailAlreadyExists:
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case user.ErrInvalidPassword:
+	case errs.ErrInvalidPassword:
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case apikey.ErrAPIKeyNotFound:
+	case errs.ErrAPIKeyNotFound:
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case apikey.ErrAPIKeyNotOwned:
+	case errs.ErrAPIKeyNotOwned:
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})

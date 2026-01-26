@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 )
@@ -59,11 +59,11 @@ func APIKeyAuth(apiKeyService apikey.Service, l logger.Logger) gin.HandlerFunc {
 
 			var message string
 			switch err {
-			case apikey.ErrInvalidAPIKey:
+			case errs.ErrAPIKeyInvalid:
 				message = "Invalid API key."
-			case apikey.ErrAPIKeyDisabled:
+			case errs.ErrAPIKeyDisabled:
 				message = "API key is disabled."
-			case apikey.ErrAPIKeyExpired:
+			case errs.ErrAPIKeyExpired:
 				message = "API key has expired."
 			default:
 				message = "Authentication failed."

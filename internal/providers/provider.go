@@ -3,9 +3,9 @@ package providers
 
 import (
 	"context"
-	"errors"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 )
 
 // Provider 是所有 LLM 提供商必须实现的接口。
@@ -35,4 +35,5 @@ type Provider interface {
 }
 
 // ErrProviderUnavailable 当没有可用提供商时返回。
-var ErrProviderUnavailable = errors.New("no provider available")
+// 为向后兼容保留，实际引用 errs.ErrProviderUnavailable
+var ErrProviderUnavailable = errs.ErrProviderUnavailable

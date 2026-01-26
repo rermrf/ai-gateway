@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/auth"
 	"ai-gateway/internal/service/user"
@@ -91,7 +92,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// 查找用户
 	u, err := h.userSvc.GetByUsername(c.Request.Context(), req.Username)
 	if err != nil {
-		if errors.Is(err, user.ErrUserNotFound) {
+		if errors.Is(err, errs.ErrUserNotFound) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 			return
 		}
@@ -138,15 +139,13 @@ func (h *AuthHandler) handleError(c *gin.Context, err error) {
 	h.logger.Warn("request failed", logger.Error(err))
 
 	switch err {
-	case user.ErrUserAlreadyExists:
+	case errs.ErrUserAlreadyExists:
 		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
-	case user.ErrEmailAlreadyExists:
+	case errs.ErrEmailAlreadyExists:
 		c.JSON(http.StatusConflict, gin.H{"error": "邮箱已被注册"})
-	case user.ErrUserNotFound:
+	case errs.ErrUserNotFound:
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
 	}
 }
-
-

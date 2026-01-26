@@ -6,32 +6,17 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"time"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
-var (
-	// ErrInvalidAPIKey API key 无效
-	ErrInvalidAPIKey = errors.New("invalid API key")
-	// ErrAPIKeyDisabled API key 已禁用
-	ErrAPIKeyDisabled = errors.New("API key is disabled")
-	// ErrAPIKeyExpired API key 已过期
-	ErrAPIKeyExpired = errors.New("API key has expired")
-	// ErrAPIKeyNotFound API Key 不存在
-	ErrAPIKeyNotFound = errors.New("API Key 不存在")
-	// ErrAPIKeyNotOwned 无权操作此 API Key
-	ErrAPIKeyNotOwned = errors.New("无权操作此 API Key")
-	// ErrAPIKeyQuotaExceeded API Key 额度不足
-	ErrAPIKeyQuotaExceeded = errors.New("API Key 额度不足")
-)
-
 // Service API Key 服务接口。
 //
-//go:generate mockgen -source=./apikey.go -destination=./mocks/apikey.mock.go -package=apikeymocks -typed Service
+//go:generate mockgen -source=./apikey.go -destination=./mocks/apikey.mock.go -package=apikeymocks Service
 type Service interface {
 	// ValidateAPIKey 验证 API key 并返回用户信息
 	ValidateAPIKey(ctx context.Context, key string) (*domain.APIKey, error)
@@ -90,7 +75,7 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 		s.logger.Warn("API key not found",
 			logger.String("key_prefix", maskAPIKey(key)),
 		)
-		return nil, ErrInvalidAPIKey
+		return nil, errs.ErrAPIKeyInvalid
 	}
 
 	// 检查是否启用
@@ -99,7 +84,7 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 			logger.Int64("key_id", apiKey.ID),
 			logger.String("key_prefix", maskAPIKey(key)),
 		)
-		return nil, ErrAPIKeyDisabled
+		return nil, errs.ErrAPIKeyDisabled
 	}
 
 	// 检查是否过期
@@ -109,7 +94,7 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 			logger.String("key_prefix", maskAPIKey(key)),
 			logger.Time("expires_at", *apiKey.ExpiresAt),
 		)
-		return nil, ErrAPIKeyExpired
+		return nil, errs.ErrAPIKeyExpired
 	}
 
 	// 检查额度
@@ -120,7 +105,7 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (*domain.APIKe
 			logger.Float64("used", apiKey.UsedAmount),
 			logger.Any("quota", apiKey.Quota),
 		)
-		return nil, ErrAPIKeyQuotaExceeded
+		return nil, errs.ErrAPIKeyQuotaExceeded
 	}
 
 	s.logger.Info("API key validated successfully",
@@ -223,10 +208,10 @@ func (s *service) Delete(ctx context.Context, userID int64, keyID int64) error {
 		return err
 	}
 	if apiKey == nil {
-		return ErrAPIKeyNotFound
+		return errs.ErrAPIKeyNotFound
 	}
 	if apiKey.UserID != userID {
-		return ErrAPIKeyNotOwned
+		return errs.ErrAPIKeyNotOwned
 	}
 
 	return s.repo.Delete(ctx, keyID)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"ai-gateway/config"
@@ -23,7 +24,7 @@ import (
 
 // GatewayService 定义了网关操作的接口。
 //
-//go:generate mockgen -source=./gateway.go -destination=./mocks/gateway.mock.go -package=gatewaymocks -typed GatewayService
+//go:generate mockgen -source=./gateway.go -destination=./mocks/gateway.mock.go -package=gatewaymocks GatewayService
 type GatewayService interface {
 	Chat(ctx context.Context, req *domain.ChatRequest) (*domain.ChatResponse, error)
 	ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, string, error)
@@ -48,6 +49,7 @@ type gatewayService struct {
 	routingRuleRepo repository.RoutingRuleRepository
 	loadBalanceRepo repository.LoadBalanceRepository
 
+	mu               sync.RWMutex                                        // 保护配置数据的读写锁
 	providers        map[string]providers.Provider                       // 名称 -> 供应商
 	configuredModels map[string][]string                                 // 供应商名称 -> 模型列表
 	typeDefaults     map[string]string                                   // 类型 -> 默认供应商名称
@@ -239,13 +241,15 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 		)
 	}
 
-	// 原子更新
+	// 使用写锁原子更新配置
+	g.mu.Lock()
 	g.providers = newProviders
 	g.configuredModels = newConfiguredModels
 	g.typeDefaults = newTypeDefaults
 	g.routes = newRoutes
 	g.prefixRoutes = newPrefixRoutes
 	g.loadBalancers = newLoadBalancers
+	g.mu.Unlock()
 
 	g.logger.Info("configuration reloaded from database",
 		logger.Int("providers", len(g.providers)),
@@ -260,6 +264,9 @@ func (g *gatewayService) Reload(ctx context.Context) error {
 // GetProvider 返回给定模型的供应商。
 // 优先级：精确匹配 -> 负载均衡 -> 前缀匹配 -> 类型默认
 func (g *gatewayService) GetProvider(model string) (providers.Provider, string, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	// 1. 检查精确路由
 	if route, ok := g.routes[model]; ok {
 		provider, ok := g.providers[route.Provider]
@@ -361,6 +368,7 @@ func (g *gatewayService) Chat(ctx context.Context, req *domain.ChatRequest) (*do
 }
 
 // ChatStream 处理流式聊天请求。
+// 注意：流式请求不使用重试，因为一旦开始流式传输，重试会导致数据丢失或重复。
 func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest) (<-chan domain.StreamDelta, string, error) {
 	provider, actualModel, err := g.GetProvider(req.Model)
 	if err != nil {
@@ -374,14 +382,11 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 		logger.String("provider", provider.Name()),
 	)
 
-	var ch <-chan domain.StreamDelta
-
-	err = retry.Do(ctx, retry.DefaultConfig, func() error {
-		var e error
-		ch, e = provider.ChatStream(ctx, req)
-		return e
-	})
-
+	// 流式请求不重试 - 重试会导致：
+	// 1. 之前的 channel 可能已经开始发送数据
+	// 2. 客户端可能收到重复或乱序的数据
+	// 3. 无法保证数据完整性
+	ch, err := provider.ChatStream(ctx, req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -390,11 +395,23 @@ func (g *gatewayService) ChatStream(ctx context.Context, req *domain.ChatRequest
 
 // ListModels 返回所有供应商提供的所有可用模型。
 func (g *gatewayService) ListModels(ctx context.Context) ([]string, error) {
+	g.mu.RLock()
+	// 复制所需数据以减少锁持有时间
+	configuredModels := make(map[string][]string)
+	for k, v := range g.configuredModels {
+		configuredModels[k] = v
+	}
+	providersCopy := make(map[string]providers.Provider)
+	for k, v := range g.providers {
+		providersCopy[k] = v
+	}
+	g.mu.RUnlock()
+
 	var allModels []string
 	seen := make(map[string]bool)
 
 	// 1. 从配置的静态模型列表中获取
-	for _, models := range g.configuredModels {
+	for _, models := range configuredModels {
 		for _, model := range models {
 			if !seen[model] {
 				allModels = append(allModels, model)
@@ -406,9 +423,9 @@ func (g *gatewayService) ListModels(ctx context.Context) ([]string, error) {
 	// 2. 如果需要，可以从 Provider 动态获取（目前作为回退或补充）
 	// 如果配置了静态模型，通常以此为准。
 	// 但如果某个 Provider 没有配置静态模型，我们可能希望尝试调用 API 获取。
-	for name, provider := range g.providers {
+	for name, provider := range providersCopy {
 		// 如果该 Provider 已经有配置的模型，跳过动态获取以节省 API 调用
-		if len(g.configuredModels[name]) > 0 {
+		if len(configuredModels[name]) > 0 {
 			continue
 		}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/service/auth"
 )
 
@@ -43,7 +44,7 @@ func JWTAuth(authService *auth.AuthService) gin.HandlerFunc {
 		tokenString := parts[1]
 		claims, err := authService.ValidateToken(tokenString)
 		if err != nil {
-			if err == auth.ErrTokenExpired {
+			if err == errs.ErrTokenExpired {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 已过期"})
 			} else {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的 Token"})

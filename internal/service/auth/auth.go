@@ -7,12 +7,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-)
 
-var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidToken       = errors.New("invalid token")
-	ErrTokenExpired       = errors.New("token expired")
+	"ai-gateway/internal/errs"
 )
 
 // Claims JWT claims 结构。
@@ -74,14 +70,14 @@ func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrTokenExpired
+			return nil, errs.ErrTokenExpired
 		}
-		return nil, ErrInvalidToken
+		return nil, errs.ErrInvalidToken
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return claims, nil
 	}
 
-	return nil, ErrInvalidToken
+	return nil, errs.ErrInvalidToken
 }

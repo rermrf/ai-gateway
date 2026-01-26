@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 	"ai-gateway/internal/service/wallet"
@@ -12,7 +13,7 @@ import (
 
 // Service 使用统计服务接口。
 //
-//go:generate mockgen -source=./usage.go -destination=./mocks/usage.mock.go -package=usagemocks -typed Service
+//go:generate mockgen -source=./usage.go -destination=./mocks/usage.mock.go -package=usagemocks Service
 type Service interface {
 	// GetGlobalStats 获取全局使用统计（管理员）
 	GetGlobalStats(ctx context.Context) (*domain.UsageStats, error)
@@ -119,6 +120,6 @@ func (s *service) GetLeaderboard(ctx context.Context, dimension string, limit, d
 	case "client_ip":
 		return s.usageLogRepo.GetTopClientIPs(ctx, limit, days)
 	default:
-		return nil, domain.ErrInvalidParameter
+		return nil, errs.ErrInvalidParameter
 	}
 }

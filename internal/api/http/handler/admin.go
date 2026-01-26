@@ -2,12 +2,15 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
@@ -710,10 +713,14 @@ func (h *AdminHandler) TopUpUserWallet(c *gin.Context) {
 		return
 	}
 
-	// Assuming 0 or empty string as ReferenceID for now, or get Admin ID from context
-	adminID := "admin" // TODO: get from auth context
+	// 从认证上下文获取管理员信息
+	adminUsername := middleware.GetUsername(c)
+	if adminUsername == "" {
+		adminUsername = "system" // 兜底值
+	}
+	referenceID := fmt.Sprintf("admin:%s", adminUsername)
 
-	if err := h.walletSvc.TopUp(c.Request.Context(), userID, req.Amount, adminID); err != nil {
+	if err := h.walletSvc.TopUp(c.Request.Context(), userID, req.Amount, referenceID); err != nil {
 		h.logger.Error("failed to top up wallet", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to top up wallet"})
 		return
@@ -799,7 +806,7 @@ func (h *AdminHandler) GetUsageLeaderboard(c *gin.Context) {
 
 	entries, err := h.usageSvc.GetLeaderboard(c.Request.Context(), dimension, limit, days)
 	if err != nil {
-		if err == domain.ErrInvalidParameter {
+		if err == errs.ErrInvalidParameter {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dimension parameter"})
 			return
 		}

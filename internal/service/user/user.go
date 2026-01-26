@@ -3,27 +3,18 @@ package user
 
 import (
 	"context"
-	"errors"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/repository"
 )
 
-// 用户服务错误定义
-var (
-	ErrUserNotFound       = errors.New("用户不存在")
-	ErrUserAlreadyExists  = errors.New("用户已存在")
-	ErrEmailAlreadyExists = errors.New("邮箱已被注册")
-	ErrInvalidPassword    = errors.New("密码错误")
-	ErrUserDisabled       = errors.New("用户已被禁用")
-)
-
 // Service 用户服务接口。
 //
-//go:generate mockgen -source=./user.go -destination=./mocks/user.mock.go -package=usermocks -typed Service
+//go:generate mockgen -source=./user.go -destination=./mocks/user.mock.go -package=usermocks Service
 type Service interface {
 	// 用户管理
 	Register(ctx context.Context, username, email, password string) (*domain.User, error)
@@ -67,13 +58,13 @@ func (s *service) Register(ctx context.Context, username, email, password string
 	// 检查用户名是否已存在
 	existing, _ := s.userRepo.GetByUsername(ctx, username)
 	if existing != nil {
-		return nil, ErrUserAlreadyExists
+		return nil, errs.ErrUserAlreadyExists
 	}
 
 	// 检查邮箱是否已存在
 	existing, _ = s.userRepo.GetByEmail(ctx, email)
 	if existing != nil {
-		return nil, ErrEmailAlreadyExists
+		return nil, errs.ErrEmailAlreadyExists
 	}
 
 	// 加密密码
@@ -107,7 +98,7 @@ func (s *service) GetByID(ctx context.Context, id int64) (*domain.User, error) {
 		return nil, err
 	}
 	if user == nil {
-		return nil, ErrUserNotFound
+		return nil, errs.ErrUserNotFound
 	}
 	return user, nil
 }
@@ -119,7 +110,7 @@ func (s *service) GetByUsername(ctx context.Context, username string) (*domain.U
 		return nil, err
 	}
 	if user == nil {
-		return nil, ErrUserNotFound
+		return nil, errs.ErrUserNotFound
 	}
 	return user, nil
 }
@@ -135,7 +126,7 @@ func (s *service) UpdateProfile(ctx context.Context, userID int64, email string)
 		// 检查邮箱是否被占用
 		existing, _ := s.userRepo.GetByEmail(ctx, email)
 		if existing != nil && existing.ID != userID {
-			return nil, ErrEmailAlreadyExists
+			return nil, errs.ErrEmailAlreadyExists
 		}
 		user.Email = email
 	}
@@ -156,7 +147,7 @@ func (s *service) ChangePassword(ctx context.Context, userID int64, oldPassword,
 
 	// 验证旧密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
-		return ErrInvalidPassword
+		return errs.ErrInvalidPassword
 	}
 
 	// 加密新密码
