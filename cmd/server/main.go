@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"ai-gateway/cmd/server/ioc"
 	"ai-gateway/config"
-	"ai-gateway/internal/ioc"
 	"ai-gateway/internal/pkg/logger"
 )
 
@@ -69,16 +69,19 @@ func main() {
 		}
 	}
 
-	// 初始化日志记录器
-	l := ioc.InitLogger(cfg)
+	app, err := ioc.InitApp(cfg)
+	if err != nil {
+		panic("failed to init app: " + err.Error())
+	}
+
+	l := app.Logger
 
 	l.Info("starting ai-gateway",
 		logger.String("addr", cfg.HTTP.Addr),
 		logger.Int("providers_count", len(cfg.Providers)),
 	)
 
-	// 初始化 HTTP 服务器
-	server := ioc.InitGinServer(cfg, l)
+	server := app.HTTPServer
 
 	// 在协程中启动服务器
 	go func() {

@@ -39,11 +39,11 @@ export function AuditLogs() {
             if (!filters.clientIp) params.delete('clientIp')
 
             const res = await apiClient.get(`/admin/usage-logs?${params.toString()}`)
-            return res.data
+            // 后端 /api/* 统一返回 { code, msg, data }
+            return res.data.data
         },
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const handleSearch = () => {
         setPage(1) // Reset to first page on search
         // Trigger refetch by updating state (handled by useQuery dependency)

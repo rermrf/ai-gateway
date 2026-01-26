@@ -4,7 +4,7 @@
 
 # 构建产物
 bin/
-server
+/server
 *.exe
 *.dll
 *.so
