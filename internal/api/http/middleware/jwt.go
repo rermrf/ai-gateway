@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -44,7 +45,7 @@ func JWTAuth(authService *auth.AuthService) gin.HandlerFunc {
 		tokenString := parts[1]
 		claims, err := authService.ValidateToken(tokenString)
 		if err != nil {
-			if err == errs.ErrTokenExpired {
+			if errors.Is(err, errs.ErrTokenExpired) {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 已过期"})
 			} else {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的 Token"})

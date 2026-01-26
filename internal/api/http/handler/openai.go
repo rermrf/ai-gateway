@@ -12,6 +12,7 @@ import (
 
 	"ai-gateway/internal/converter"
 	"ai-gateway/internal/domain"
+	"ai-gateway/internal/errs"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	gatewaysvc "ai-gateway/internal/service/gateway"
@@ -66,21 +67,11 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 		hasBalance, err := h.walletSvc.HasBalance(c.Request.Context(), userID)
 		if err != nil {
 			h.logger.Error("failed to check balance", logger.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": gin.H{
-					"message": "Failed to check balance",
-					"type":    "api_error",
-				},
-			})
+			writeOpenAIError(c, errs.Wrap(errs.CodeInternalError, "Failed to check balance", err))
 			return
 		}
 		if !hasBalance {
-			c.JSON(http.StatusPaymentRequired, gin.H{
-				"error": gin.H{
-					"message": "Insufficient balance. Please top up your wallet.",
-					"type":    "invalid_request_error",
-				},
-			})
+			writeOpenAIError(c, errs.Wrap(errs.CodeInsufficientBalance, "Insufficient balance. Please top up your wallet.", nil))
 			return
 		}
 	}
@@ -89,24 +80,14 @@ func (h *OpenAIHandler) ChatCompletions(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		h.logger.Error("failed to read request body", logger.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "Failed to read request body",
-				"type":    "invalid_request_error",
-			},
-		})
+		writeOpenAIError(c, errs.Wrap(errs.CodeInvalidRequest, "Failed to read request body", err))
 		return
 	}
 
 	req, err := h.converter.DecodeRequest(body)
 	if err != nil {
 		h.logger.Error("failed to decode request", logger.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "invalid_request_error",
-			},
-		})
+		writeOpenAIError(c, errs.New(errs.CodeInvalidRequest, err.Error()))
 		return
 	}
 
@@ -121,12 +102,7 @@ func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest,
 	resp, err := h.gw.Chat(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("chat request failed", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "api_error",
-			},
-		})
+		writeOpenAIError(c, err)
 		return
 	}
 
@@ -137,12 +113,7 @@ func (h *OpenAIHandler) handleNonStream(c *gin.Context, req *domain.ChatRequest,
 	respBody, err := h.converter.EncodeResponse(resp)
 	if err != nil {
 		h.logger.Error("failed to encode response", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": "Failed to encode response",
-				"type":    "api_error",
-			},
-		})
+		writeOpenAIError(c, errs.Wrap(errs.CodeInternalError, "Failed to encode response", err))
 		return
 	}
 
@@ -153,12 +124,7 @@ func (h *OpenAIHandler) handleStream(c *gin.Context, req *domain.ChatRequest, st
 	deltaCh, providerName, err := h.gw.ChatStream(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("stream request failed", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "api_error",
-			},
-		})
+		writeOpenAIError(c, err)
 		return
 	}
 
@@ -312,12 +278,7 @@ func (h *OpenAIHandler) ListModels(c *gin.Context) {
 	models, err := h.gw.ListModels(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list models", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "api_error",
-			},
-		})
+		writeOpenAIError(c, err)
 		return
 	}
 

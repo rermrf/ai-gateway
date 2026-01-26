@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -58,12 +59,12 @@ func APIKeyAuth(apiKeyService apikey.Service, l logger.Logger) gin.HandlerFunc {
 			)
 
 			var message string
-			switch err {
-			case errs.ErrAPIKeyInvalid:
+			switch {
+			case errors.Is(err, errs.ErrAPIKeyInvalid):
 				message = "Invalid API key."
-			case errs.ErrAPIKeyDisabled:
+			case errors.Is(err, errs.ErrAPIKeyDisabled):
 				message = "API key is disabled."
-			case errs.ErrAPIKeyExpired:
+			case errors.Is(err, errs.ErrAPIKeyExpired):
 				message = "API key has expired."
 			default:
 				message = "Authentication failed."

@@ -3,13 +3,13 @@ package handler
 
 import (
 	"errors"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
+	"ai-gateway/internal/pkg/ginx"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/auth"
 	"ai-gateway/internal/service/user"
@@ -46,7 +46,7 @@ type RegisterRequest struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -55,15 +55,12 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "注册成功，请等待管理员审核",
-		"data": gin.H{
-			"id":       u.ID,
-			"username": u.Username,
-			"email":    u.Email,
-			"role":     u.Role.String(),
-		},
+	c.Status(201)
+	ginx.OK(c, gin.H{
+		"id":       u.ID,
+		"username": u.Username,
+		"email":    u.Email,
+		"role":     u.Role.String(),
 	})
 }
 
@@ -85,7 +82,7 @@ type LoginResponse struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -93,7 +90,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	u, err := h.userSvc.GetByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		if errors.Is(err, errs.ErrUserNotFound) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+			ginx.Fail(c, errs.CodeInvalidCredentials, "用户名或密码错误")
 			return
 		}
 		h.handleError(c, err)
@@ -102,17 +99,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		ginx.Fail(c, errs.CodeInvalidCredentials, "用户名或密码错误")
 		return
 	}
 
 	// 检查用户状态
 	if !u.CanLogin() {
 		if u.Status == domain.UserStatusPending {
-			c.JSON(http.StatusForbidden, gin.H{"error": "账号审核中，请联系管理员"})
+			ginx.Fail(c, errs.CodeForbidden, "账号审核中，请联系管理员")
 			return
 		}
-		c.JSON(http.StatusForbidden, gin.H{"error": "用户已被禁用"})
+		ginx.Fail(c, errs.CodeForbidden, "用户已被禁用")
 		return
 	}
 
@@ -120,32 +117,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	token, err := h.authService.GenerateToken(u.ID, u.Username, string(u.Role))
 	if err != nil {
 		h.logger.Error("failed to generate token", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "登录失败"})
+		ginx.Fail(c, errs.CodeInternalError, "登录失败")
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": LoginResponse{
-			Token:    token,
-			UserID:   u.ID,
-			Username: u.Username,
-			Role:     u.Role.String(),
-		},
+	ginx.OK(c, LoginResponse{
+		Token:    token,
+		UserID:   u.ID,
+		Username: u.Username,
+		Role:     u.Role.String(),
 	})
 }
 
 // handleError 统一错误处理。
 func (h *AuthHandler) handleError(c *gin.Context, err error) {
 	h.logger.Warn("request failed", logger.Error(err))
-
-	switch err {
-	case errs.ErrUserAlreadyExists:
-		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
-	case errs.ErrEmailAlreadyExists:
-		c.JSON(http.StatusConflict, gin.H{"error": "邮箱已被注册"})
-	case errs.ErrUserNotFound:
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
-	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
-	}
+	ginx.FromErr(c, err)
 }

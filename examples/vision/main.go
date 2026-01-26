@@ -49,7 +49,8 @@ type ChatResponse struct {
 }
 
 func main() {
-	fmt.Println("=== AI Gateway 多模态/图片分析示例 ===\n")
+	fmt.Println("=== AI Gateway 多模态/图片分析示例 ===")
+	fmt.Println()
 
 	// 检查命令行参数
 	if len(os.Args) < 2 {

@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
+	"ai-gateway/internal/pkg/ginx"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
@@ -71,31 +73,31 @@ func (h *AdminHandler) ListProviders(c *gin.Context) {
 	providers, err := h.providerSvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list providers", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list providers"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": providers})
+	ginx.OK(c, providers)
 }
 
 // GetProvider 获取单个提供商详情。
 func (h *AdminHandler) GetProvider(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	provider, err := h.providerSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get provider", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get provider"})
+		ginx.FromErr(c, err)
 		return
 	}
 	if provider == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+		ginx.Fail(c, errs.CodeNotFound, "provider not found")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": provider})
+	ginx.OK(c, provider)
 }
 
 // CreateProviderRequest 创建提供商的请求体。
@@ -114,7 +116,7 @@ type CreateProviderRequest struct {
 func (h *AdminHandler) CreateProvider(c *gin.Context) {
 	var req CreateProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -131,38 +133,39 @@ func (h *AdminHandler) CreateProvider(c *gin.Context) {
 
 	if err := h.providerSvc.Create(c.Request.Context(), provider); err != nil {
 		h.logger.Error("failed to create provider", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create provider"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": provider})
+	c.Status(http.StatusCreated)
+	ginx.OK(c, provider)
 }
 
 // UpdateProvider 更新提供商。
 func (h *AdminHandler) UpdateProvider(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	provider, err := h.providerSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get provider", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get provider"})
+		ginx.FromErr(c, err)
 		return
 	}
 	if provider == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+		ginx.Fail(c, errs.CodeNotFound, "provider not found")
 		return
 	}
 
 	var req CreateProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -177,34 +180,34 @@ func (h *AdminHandler) UpdateProvider(c *gin.Context) {
 
 	if err := h.providerSvc.Update(c.Request.Context(), provider); err != nil {
 		h.logger.Error("failed to update provider", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update provider"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusOK, gin.H{"data": provider})
+	ginx.OK(c, provider)
 }
 
 // DeleteProvider 删除提供商。
 func (h *AdminHandler) DeleteProvider(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	if err := h.providerSvc.Delete(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete provider", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete provider"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	ginx.OK(c, gin.H{"message": "deleted"})
 }
 
 // --- 路由规则管理 API ---
@@ -214,10 +217,10 @@ func (h *AdminHandler) ListRoutingRules(c *gin.Context) {
 	rules, err := h.routingRuleSvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list routing rules", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list routing rules"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": rules})
+	ginx.OK(c, rules)
 }
 
 // CreateRoutingRuleRequest 创建路由规则的请求体。
@@ -234,7 +237,7 @@ type CreateRoutingRuleRequest struct {
 func (h *AdminHandler) CreateRoutingRule(c *gin.Context) {
 	var req CreateRoutingRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -249,27 +252,28 @@ func (h *AdminHandler) CreateRoutingRule(c *gin.Context) {
 
 	if err := h.routingRuleSvc.Create(c.Request.Context(), rule); err != nil {
 		h.logger.Error("failed to create routing rule", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create routing rule"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": rule})
+	c.Status(http.StatusCreated)
+	ginx.OK(c, rule)
 }
 
 // UpdateRoutingRule 更新路由规则。
 func (h *AdminHandler) UpdateRoutingRule(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	var req CreateRoutingRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -285,34 +289,34 @@ func (h *AdminHandler) UpdateRoutingRule(c *gin.Context) {
 
 	if err := h.routingRuleSvc.Update(c.Request.Context(), rule); err != nil {
 		h.logger.Error("failed to update routing rule", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update routing rule"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusOK, gin.H{"data": rule})
+	ginx.OK(c, rule)
 }
 
 // DeleteRoutingRule 删除路由规则。
 func (h *AdminHandler) DeleteRoutingRule(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	if err := h.routingRuleSvc.Delete(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete routing rule", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete routing rule"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	ginx.OK(c, gin.H{"message": "deleted"})
 }
 
 // --- 负载均衡组管理 API ---
@@ -322,10 +326,10 @@ func (h *AdminHandler) ListLoadBalanceGroups(c *gin.Context) {
 	groups, err := h.loadBalanceSvc.ListGroups(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list load balance groups", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list load balance groups"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": groups})
+	ginx.OK(c, groups)
 }
 
 // CreateLoadBalanceGroupRequest 创建负载均衡组的请求体。
@@ -340,7 +344,7 @@ type CreateLoadBalanceGroupRequest struct {
 func (h *AdminHandler) CreateLoadBalanceGroup(c *gin.Context) {
 	var req CreateLoadBalanceGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -353,38 +357,39 @@ func (h *AdminHandler) CreateLoadBalanceGroup(c *gin.Context) {
 
 	if err := h.loadBalanceSvc.CreateGroup(c.Request.Context(), group); err != nil {
 		h.logger.Error("failed to create load balance group", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create load balance group"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": group})
+	c.Status(http.StatusCreated)
+	ginx.OK(c, group)
 }
 
 // UpdateLoadBalanceGroup 更新负载均衡组。
 func (h *AdminHandler) UpdateLoadBalanceGroup(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	group, err := h.loadBalanceSvc.GetGroupByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get load balance group", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get load balance group"})
+		ginx.FromErr(c, err)
 		return
 	}
 	if group == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "load balance group not found"})
+		ginx.Fail(c, errs.CodeNotFound, "load balance group not found")
 		return
 	}
 
 	var req CreateLoadBalanceGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -395,34 +400,34 @@ func (h *AdminHandler) UpdateLoadBalanceGroup(c *gin.Context) {
 
 	if err := h.loadBalanceSvc.UpdateGroup(c.Request.Context(), group); err != nil {
 		h.logger.Error("failed to update load balance group", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update load balance group"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusOK, gin.H{"data": group})
+	ginx.OK(c, group)
 }
 
 // DeleteLoadBalanceGroup 删除负载均衡组。
 func (h *AdminHandler) DeleteLoadBalanceGroup(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	if err := h.loadBalanceSvc.DeleteGroup(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete load balance group", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete load balance group"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// Reload gateway configuration
 	if err := h.gatewaySvc.Reload(c.Request.Context()); err != nil {
 		h.logger.Warn("failed to reload gateway configuration", logger.Error(err))
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	ginx.OK(c, gin.H{"message": "deleted"})
 }
 
 // --- API Key 管理 API ---
@@ -432,28 +437,28 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 	keys, err := h.apiKeySvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list api keys", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list api keys"})
+		ginx.FromErr(c, err)
 		return
 	}
 
 	// Service 已经脱敏，不需要再次脱敏
-	c.JSON(http.StatusOK, gin.H{"data": keys})
+	ginx.OK(c, keys)
 }
 
 // DeleteAPIKey 删除 API 密钥。
 func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	if err := h.apiKeySvc.DeleteByID(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete api key", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete api key"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	ginx.OK(c, gin.H{"message": "deleted"})
 }
 
 // --- 用户管理 API ---
@@ -463,7 +468,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	users, err := h.userSvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list users", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
+		ginx.FromErr(c, err)
 		return
 	}
 
@@ -471,24 +476,24 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	for i, u := range users {
 		responses[i] = h.toUserResponse(&u)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": responses})
+	ginx.OK(c, responses)
 }
 
 // GetUser 获取单个用户详情。
 func (h *AdminHandler) GetUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	u, err := h.userSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get user", logger.Error(err))
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": h.toUserResponse(u)})
+	ginx.OK(c, h.toUserResponse(u))
 }
 
 // UpdateUserRequest 更新用户的请求体。
@@ -502,45 +507,45 @@ type UpdateUserRequest struct {
 func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	var req UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
 	u, err := h.userSvc.UpdateUser(c.Request.Context(), id, domain.UserRole(req.Role), domain.UserStatus(req.Status))
 	if err != nil {
 		h.logger.Error("failed to update user", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": h.toUserResponse(u)})
+	ginx.OK(c, h.toUserResponse(u))
 }
 
 // DeleteUser 删除用户。
 func (h *AdminHandler) DeleteUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	// 禁止删除管理员用户（ID 1）
 	if id == 1 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete admin user"})
+		ginx.Fail(c, errs.CodeForbidden, "cannot delete admin user")
 		return
 	}
 
 	if err := h.userSvc.Delete(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete user", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	ginx.OK(c, gin.H{"message": "deleted"})
 }
 
 // --- 仪表盘统计 API ---
@@ -561,12 +566,10 @@ func (h *AdminHandler) DashboardStats(c *gin.Context) {
 		h.logger.Error("failed to get global stats", logger.Error(err))
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"userCount":   userCount,
-			"apiKeyCount": keyCount,
-			"usage":       stats,
-		},
+	ginx.OK(c, gin.H{
+		"userCount":   userCount,
+		"apiKeyCount": keyCount,
+		"usage":       stats,
 	})
 }
 
@@ -588,10 +591,10 @@ func (h *AdminHandler) GetGlobalUsage(c *gin.Context) {
 	stats, err := h.usageSvc.GetGlobalStats(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to get global usage", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get global usage"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": stats})
+	ginx.OK(c, stats)
 }
 
 // --- Mode Rate 管理 API ---
@@ -607,17 +610,17 @@ func (h *AdminHandler) ListModelRates(c *gin.Context) {
 	rates, err := h.modelRateSvc.List(c.Request.Context())
 	if err != nil {
 		h.logger.Error("failed to list model rates", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list model rates"})
+		ginx.FromErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": rates})
+	ginx.OK(c, rates)
 }
 
 // CreateModelRate 创建模型费率。
 func (h *AdminHandler) CreateModelRate(c *gin.Context) {
 	var req CreateModelRateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -630,35 +633,35 @@ func (h *AdminHandler) CreateModelRate(c *gin.Context) {
 
 	if err := h.modelRateSvc.Create(c.Request.Context(), rate); err != nil {
 		h.logger.Error("failed to create model rate", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create model rate"})
+		ginx.FromErr(c, err)
 		return
 	}
-
-	c.JSON(http.StatusCreated, gin.H{"data": rate})
+	c.Status(http.StatusCreated)
+	ginx.OK(c, rate)
 }
 
 // UpdateModelRate 更新模型费率。
 func (h *AdminHandler) UpdateModelRate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	rate, err := h.modelRateSvc.GetByID(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get model rate", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get model rate"})
+		ginx.FromErr(c, err)
 		return
 	}
 	if rate == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "model rate not found"})
+		ginx.Fail(c, errs.CodeNotFound, "model rate not found")
 		return
 	}
 
 	var req CreateModelRateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -669,28 +672,26 @@ func (h *AdminHandler) UpdateModelRate(c *gin.Context) {
 
 	if err := h.modelRateSvc.Update(c.Request.Context(), rate); err != nil {
 		h.logger.Error("failed to update model rate", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update model rate"})
+		ginx.FromErr(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"data": rate})
+	ginx.OK(c, rate)
 }
 
 // DeleteModelRate 删除模型费率。
 func (h *AdminHandler) DeleteModelRate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid id")
 		return
 	}
 
 	if err := h.modelRateSvc.Delete(c.Request.Context(), id); err != nil {
 		h.logger.Error("failed to delete model rate", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete model rate"})
+		ginx.FromErr(c, err)
 		return
 	}
-
-	c.JSON(http.StatusNoContent, nil)
+	ginx.OK(c, gin.H{"message": "deleted"})
 }
 
 // --- 钱包管理 API ---
@@ -703,13 +704,13 @@ type TopUpRequest struct {
 func (h *AdminHandler) TopUpUserWallet(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid user id")
 		return
 	}
 
 	var req TopUpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -722,33 +723,31 @@ func (h *AdminHandler) TopUpUserWallet(c *gin.Context) {
 
 	if err := h.walletSvc.TopUp(c.Request.Context(), userID, req.Amount, referenceID); err != nil {
 		h.logger.Error("failed to top up wallet", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to top up wallet"})
+		ginx.FromErr(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "success"})
+	ginx.OK(c, gin.H{"message": "success"})
 }
 
 // GetUserWallet 获取用户钱包信息。
 func (h *AdminHandler) GetUserWallet(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "invalid user id")
 		return
 	}
 
 	wallet, err := h.walletSvc.GetBalance(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Error("failed to get wallet", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get wallet"})
+		ginx.FromErr(c, err)
 		return
 	}
 	// 如果钱包不存在，返回余额0
 	if wallet == nil {
 		wallet = &domain.Wallet{UserID: userID, Balance: 0}
 	}
-
-	c.JSON(http.StatusOK, gin.H{"data": wallet})
+	ginx.OK(c, wallet)
 }
 
 // --- 审计日志 API ---
@@ -779,11 +778,10 @@ func (h *AdminHandler) ListUsageLogs(c *gin.Context) {
 	logs, total, err := h.usageSvc.ListLogs(c.Request.Context(), page, pageSize, filters)
 	if err != nil {
 		h.logger.Error("failed to list usage logs", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list usage logs"})
+		ginx.FromErr(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
+	ginx.OK(c, gin.H{
 		"data":  logs,
 		"total": total,
 		"page":  page,
@@ -806,14 +804,13 @@ func (h *AdminHandler) GetUsageLeaderboard(c *gin.Context) {
 
 	entries, err := h.usageSvc.GetLeaderboard(c.Request.Context(), dimension, limit, days)
 	if err != nil {
-		if err == errs.ErrInvalidParameter {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dimension parameter"})
+		if errors.Is(err, errs.ErrInvalidParameter) {
+			ginx.Fail(c, errs.CodeInvalidParameter, "invalid dimension parameter")
 			return
 		}
 		h.logger.Error("failed to get leaderboard", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get leaderboard"})
+		ginx.FromErr(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"data": entries})
+	ginx.OK(c, entries)
 }

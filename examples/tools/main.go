@@ -89,7 +89,8 @@ func executeToolCall(name string, args map[string]any) string {
 }
 
 func main() {
-	fmt.Println("=== AI Gateway 工具调用示例 ===\n")
+	fmt.Println("=== AI Gateway 工具调用示例 ===")
+	fmt.Println()
 
 	// 定义可用的工具
 	tools := []Tool{

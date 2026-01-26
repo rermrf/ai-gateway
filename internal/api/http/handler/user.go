@@ -2,7 +2,6 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"ai-gateway/internal/api/http/middleware"
 	"ai-gateway/internal/domain"
 	"ai-gateway/internal/errs"
+	"ai-gateway/internal/pkg/ginx"
 	"ai-gateway/internal/pkg/logger"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/gateway"
@@ -57,7 +57,7 @@ func (h *UserHandler) ListAvailableModels(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": models})
+	ginx.OK(c, models)
 }
 
 // ModelWithPricing 模型及定价信息。
@@ -95,7 +95,7 @@ func (h *UserHandler) ListModelsWithPricing(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": result})
+	ginx.OK(c, result)
 }
 
 // ... existing methods ...
@@ -108,7 +108,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": h.toResponse(u)})
+	ginx.OK(c, h.toResponse(u))
 }
 
 // UpdateProfileRequest 更新个人信息请求。
@@ -121,7 +121,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": h.toResponse(u)})
+	ginx.OK(c, h.toResponse(u))
 }
 
 // ChangePasswordRequest 修改密码请求。
@@ -144,7 +144,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
+	ginx.OK(c, gin.H{"message": "密码修改成功"})
 }
 
 // --- API Key 管理 ---
@@ -165,7 +165,7 @@ func (h *UserHandler) ListMyAPIKeys(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": keys})
+	ginx.OK(c, keys)
 }
 
 // CreateAPIKeyRequest 创建 API Key 请求。
@@ -181,7 +181,7 @@ func (h *UserHandler) CreateMyAPIKey(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req CreateAPIKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ginx.Fail(c, errs.CodeInvalidParameter, err.Error())
 		return
 	}
 
@@ -191,10 +191,10 @@ func (h *UserHandler) CreateMyAPIKey(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "API Key 创建成功，请妥善保存，此密钥只显示一次",
-		"key":     fullKey,
-		"data":    apiKey,
+	c.Status(201)
+	ginx.OK(c, gin.H{
+		"key":  fullKey,
+		"data": apiKey,
 	})
 }
 
@@ -203,7 +203,7 @@ func (h *UserHandler) DeleteMyAPIKey(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
+		ginx.Fail(c, errs.CodeInvalidParameter, "无效的 ID")
 		return
 	}
 
@@ -211,7 +211,7 @@ func (h *UserHandler) DeleteMyAPIKey(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	ginx.OK(c, gin.H{"message": "删除成功"})
 }
 
 // --- 钱包管理 ---
@@ -228,7 +228,7 @@ func (h *UserHandler) GetMyWallet(c *gin.Context) {
 	if wallet == nil {
 		wallet = &domain.Wallet{UserID: userID, Balance: 0}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": wallet})
+	ginx.OK(c, wallet)
 }
 
 // GetMyTransactions 获取当前用户交易记录。
@@ -242,8 +242,7 @@ func (h *UserHandler) GetMyTransactions(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
+	ginx.OK(c, gin.H{
 		"data":  txs,
 		"total": total,
 		"page":  page,
@@ -261,7 +260,7 @@ func (h *UserHandler) GetMyUsage(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": stats})
+	ginx.OK(c, stats)
 }
 
 // GetMyDailyUsage 获取当前用户每日使用详情。
@@ -279,7 +278,7 @@ func (h *UserHandler) GetMyDailyUsage(c *gin.Context) {
 		h.handleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": usage})
+	ginx.OK(c, usage)
 }
 
 // UserResponse 用户响应 DTO。
@@ -307,19 +306,5 @@ func (h *UserHandler) toResponse(u *domain.User) UserResponse {
 // handleError 统一错误处理。
 func (h *UserHandler) handleError(c *gin.Context, err error) {
 	h.logger.Warn("request failed", logger.Error(err))
-
-	switch err {
-	case errs.ErrUserNotFound:
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errs.ErrUserAlreadyExists, errs.ErrEmailAlreadyExists:
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errs.ErrInvalidPassword:
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errs.ErrAPIKeyNotFound:
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errs.ErrAPIKeyNotOwned:
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
-	}
+	ginx.FromErr(c, err)
 }
