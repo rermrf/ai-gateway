@@ -39,7 +39,17 @@ func InitRedis(cfg *config.Config, l logger.Logger) (redis.Cmdable, error) {
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to connect to redis: %w", err)
+		// Redis 目前主要用于限流与缓存：
+		// - 限流启用时必须可用（fail fast）
+		// - 限流关闭时允许降级为无 Redis（禁用缓存/限流）
+		if cfg.RateLimit.Enabled {
+			return nil, fmt.Errorf("failed to connect to redis: %w", err)
+		}
+		l.Warn("redis unavailable, continue without redis",
+			logger.String("addr", cfg.Redis.Addr),
+			logger.Error(err),
+		)
+		return nil, nil
 	}
 
 	l.Info("connected to redis", logger.String("addr", cfg.Redis.Addr), logger.Int("db", cfg.Redis.DB))
