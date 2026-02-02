@@ -3,7 +3,7 @@ package user
 
 import (
 	"context"
-
+	"fmt"
 	"golang.org/x/crypto/bcrypt"
 
 	"ai-gateway/internal/domain"
@@ -25,6 +25,10 @@ type Service interface {
 	List(ctx context.Context) ([]domain.User, error)
 	UpdateUser(ctx context.Context, userID int64, role domain.UserRole, status domain.UserStatus) (*domain.User, error)
 	Delete(ctx context.Context, userID int64) error
+
+	// OAuth 登录
+	FindOrCreateByLinuxDo(ctx context.Context, linuxDoID int64, username, email, avatarURL string) (*domain.User, error)
+	BindLinuxDo(ctx context.Context, userID, linuxDoID int64, linuxDoUsername string) error
 
 	// 使用统计
 	GetUsageStats(ctx context.Context, userID int64) (*domain.UsageStats, error)
@@ -198,4 +202,83 @@ func (s *service) GetUsageStats(ctx context.Context, userID int64) (*domain.Usag
 // GetDailyUsage 获取每日使用统计。
 func (s *service) GetDailyUsage(ctx context.Context, userID int64, days int) ([]domain.DailyUsage, error) {
 	return s.usageLogRepo.GetDailyUsageByUserID(ctx, userID, days)
+}
+
+// FindOrCreateByLinuxDo 通过 LinuxDo ID 查找或创建用户。
+func (s *service) FindOrCreateByLinuxDo(ctx context.Context, linuxDoID int64, username, email, avatarURL string) (*domain.User, error) {
+	// 先尝试通过 LinuxDo ID 查找
+	user, err := s.userRepo.GetByLinuxDoID(ctx, linuxDoID)
+	if err != nil {
+		s.logger.Error("failed to get user by LinuxDo ID", logger.Error(err))
+		return nil, err
+	}
+	if user != nil {
+		// 更新头像（如果有变化）
+		if avatarURL != "" && user.AvatarURL != avatarURL {
+			user.AvatarURL = avatarURL
+			if err := s.userRepo.Update(ctx, user); err != nil {
+				s.logger.Warn("failed to update avatar", logger.Error(err))
+				// 不阻塞登录流程
+			}
+		}
+		return user, nil
+	}
+
+	// 不存在则创建新用户
+	// 生成唯一用户名（添加前缀并处理冲突）
+	baseUsername := fmt.Sprintf("ldo_%s", username)
+	newUsername := baseUsername
+
+	// 检查用户名冲突，最多尝试 10 次
+	for i := 1; i <= 10; i++ {
+		existing, _ := s.userRepo.GetByUsername(ctx, newUsername)
+		if existing == nil {
+			break
+		}
+		newUsername = fmt.Sprintf("%s_%d", baseUsername, i)
+		if i == 10 {
+			// 极端情况：使用 LinuxDo ID 作为后缀
+			newUsername = fmt.Sprintf("ldo_%d", linuxDoID)
+		}
+	}
+
+	user = &domain.User{
+		Username:        newUsername,
+		Email:           email,
+		PasswordHash:    "", // OAuth 用户无密码
+		Role:            domain.UserRoleUser,
+		Status:          domain.UserStatusActive, // OAuth 用户自动激活
+		LinuxDoID:       linuxDoID,
+		LinuxDoUsername: username,
+		AvatarURL:       avatarURL,
+	}
+
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		s.logger.Error("failed to create user from LinuxDo",
+			logger.Error(err),
+			logger.Int64("linuxDoId", linuxDoID),
+			logger.String("username", newUsername),
+		)
+		return nil, err
+	}
+
+	s.logger.Info("user created from LinuxDo",
+		logger.Int64("userId", user.ID),
+		logger.Int64("linuxDoId", linuxDoID),
+		logger.String("username", newUsername),
+	)
+	return user, nil
+}
+
+// BindLinuxDo 绑定 LinuxDo 账号到现有用户。
+func (s *service) BindLinuxDo(ctx context.Context, userID, linuxDoID int64, linuxDoUsername string) error {
+	user, err := s.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	user.LinuxDoID = linuxDoID
+	user.LinuxDoUsername = linuxDoUsername
+
+	return s.userRepo.Update(ctx, user)
 }

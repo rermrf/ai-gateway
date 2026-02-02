@@ -36,6 +36,12 @@ mysql:
 auth:
   enabled: true
   # 注意：API Keys 现在在数据库中管理，使用 Admin API 或直接操作数据库
+  # LinuxDo OAuth2 登录配置
+  linuxdo:
+    enabled: false  # 设为 true 启用
+    clientId: ""    # 建议使用环境变量 LINUXDO_CLIENT_ID
+    clientSecret: "" # 建议使用环境变量 LINUXDO_CLIENT_SECRET
+    redirectUrl: "http://localhost:8081/api/oauth/linuxdo/callback"
 
 # ========================================
 # 注意：供应商、路由和负载均衡现在在 MySQL 中管理

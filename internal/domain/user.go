@@ -48,7 +48,11 @@ type User struct {
 	PasswordHash string     `json:"-"` // 不序列化密码
 	Role         UserRole   `json:"role"`
 	Status       UserStatus `json:"status"`
-	CreatedAt    time.Time  `json:"createdAt"`
+	// OAuth 关联信息
+	LinuxDoID       int64  `json:"linuxdoId,omitempty"`
+	LinuxDoUsername string `json:"linuxdoUsername,omitempty"`
+	AvatarURL       string `json:"avatarUrl,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 

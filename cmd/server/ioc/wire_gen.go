@@ -22,6 +22,7 @@ import (
 	"ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/loadbalance"
 	"ai-gateway/internal/service/modelrate"
+	"ai-gateway/internal/service/oauth/linuxdo"
 	"ai-gateway/internal/service/provider"
 	"ai-gateway/internal/service/routingrule"
 	"ai-gateway/internal/service/usage"
@@ -82,9 +83,11 @@ func InitApp(cfg *config.Config) (*App, error) {
 	authHandler := handler.NewAuthHandler(userService, authService, logger)
 	userHandler := handler.NewUserHandler(userService, apikeyService, walletService, gatewayService, service, logger)
 	healthHandler := handler.NewHealthHandler(db, cmdable, logger)
+	linuxdoService := provideLinuxDoService(cfg, logger)
+	oAuthHandler := provideOAuthHandler(linuxdoService, userService, authService, cfg, logger)
 	limiter := provideLimiter(cfg, cmdable)
 	authConfig := provideAuthConfig(cfg)
-	server := http.NewServer(openAIHandler, anthropicHandler, adminHandler, authHandler, userHandler, healthHandler, authService, apikeyService, limiter, authConfig, logger)
+	server := http.NewServer(openAIHandler, anthropicHandler, adminHandler, authHandler, userHandler, healthHandler, oAuthHandler, authService, apikeyService, limiter, authConfig, logger)
 	app := &App{
 		Logger:     logger,
 		HTTPServer: server,
@@ -165,4 +168,32 @@ func provideModelRateCache(rdb redis.Cmdable) cache.ModelRateCache {
 		return nil
 	}
 	return cache.NewRedisModelRateCache(rdb)
+}
+
+func provideLinuxDoService(cfg *config.Config, l logger.Logger) linuxdo.Service {
+	if !cfg.Auth.LinuxDo.Enabled {
+		return nil
+	}
+	return linuxdo.NewService(
+		cfg.Auth.LinuxDo.ClientID,
+		cfg.Auth.LinuxDo.ClientSecret,
+		cfg.Auth.LinuxDo.RedirectURL,
+		l,
+	)
+}
+
+func provideOAuthHandler(
+	linuxDoSvc linuxdo.Service,
+	userSvc user.Service,
+	authService *auth.AuthService,
+	cfg *config.Config,
+	l logger.Logger,
+) *handler.OAuthHandler {
+	return handler.NewOAuthHandler(
+		linuxDoSvc,
+		userSvc,
+		authService,
+		cfg.Auth.LinuxDo.Enabled,
+		l,
+	)
 }

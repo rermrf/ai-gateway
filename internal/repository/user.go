@@ -16,6 +16,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*domain.User, error)
 	GetByUsername(ctx context.Context, username string) (*domain.User, error)
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
+	GetByLinuxDoID(ctx context.Context, linuxDoID int64) (*domain.User, error)
 	List(ctx context.Context) ([]domain.User, error)
 }
 
@@ -38,6 +39,9 @@ func (r *userRepository) toDAO(user *domain.User) *dao.User {
 		PasswordHash: user.PasswordHash,
 		Role:         dao.UserRole(user.Role),
 		Status:       dao.UserStatus(user.Status),
+		LinuxDoID:       user.LinuxDoID,
+		LinuxDoUsername: user.LinuxDoUsername,
+		AvatarURL:       user.AvatarURL,
 		CreatedAt:    user.CreatedAt,
 		UpdatedAt:    user.UpdatedAt,
 	}
@@ -55,6 +59,9 @@ func (r *userRepository) toDomain(user *dao.User) *domain.User {
 		PasswordHash: user.PasswordHash,
 		Role:         domain.UserRole(user.Role),
 		Status:       domain.UserStatus(user.Status),
+		LinuxDoID:       user.LinuxDoID,
+		LinuxDoUsername: user.LinuxDoUsername,
+		AvatarURL:       user.AvatarURL,
 		CreatedAt:    user.CreatedAt,
 		UpdatedAt:    user.UpdatedAt,
 	}
@@ -97,6 +104,14 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*d
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	daoUser, err := r.dao.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomain(daoUser), nil
+}
+
+func (r *userRepository) GetByLinuxDoID(ctx context.Context, linuxDoID int64) (*domain.User, error) {
+	daoUser, err := r.dao.GetByLinuxDoID(ctx, linuxDoID)
 	if err != nil {
 		return nil, err
 	}

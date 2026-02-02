@@ -19,6 +19,7 @@ import (
 	"ai-gateway/internal/repository/dao"
 	"ai-gateway/internal/service/apikey"
 	"ai-gateway/internal/service/auth"
+	"ai-gateway/internal/service/oauth/linuxdo"
 	"ai-gateway/internal/service/chat"
 	"ai-gateway/internal/service/gateway"
 	"ai-gateway/internal/service/loadbalance"
@@ -88,6 +89,7 @@ func InitApp(cfg *config.Config) (*App, error) {
 		loadbalance.NewService,
 		gateway.NewGatewayService,
 		chat.NewService,
+		provideLinuxDoService,
 
 		// Handler
 		handler.NewOpenAIHandler,
@@ -96,6 +98,7 @@ func InitApp(cfg *config.Config) (*App, error) {
 		handler.NewUserHandler,
 		handler.NewAdminHandler,
 		handler.NewHealthHandler,
+		provideOAuthHandler,
 
 		// HTTP server
 		httpapi.NewServer,
@@ -171,4 +174,32 @@ func provideModelRateCache(rdb redis.Cmdable) cache.ModelRateCache {
 		return nil
 	}
 	return cache.NewRedisModelRateCache(rdb)
+}
+
+func provideLinuxDoService(cfg *config.Config, l logger.Logger) linuxdo.Service {
+	if !cfg.Auth.LinuxDo.Enabled {
+		return nil
+	}
+	return linuxdo.NewService(
+		cfg.Auth.LinuxDo.ClientID,
+		cfg.Auth.LinuxDo.ClientSecret,
+		cfg.Auth.LinuxDo.RedirectURL,
+		l,
+	)
+}
+
+func provideOAuthHandler(
+	linuxDoSvc linuxdo.Service,
+	userSvc user.Service,
+	authService *auth.AuthService,
+	cfg *config.Config,
+	l logger.Logger,
+) *handler.OAuthHandler {
+	return handler.NewOAuthHandler(
+		linuxDoSvc,
+		userSvc,
+		authService,
+		cfg.Auth.LinuxDo.Enabled,
+		l,
+	)
 }

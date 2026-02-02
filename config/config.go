@@ -112,10 +112,19 @@ type LoadBalanceMember struct {
 	Priority int    `yaml:"priority"` // 用于故障转移策略（数值越小优先级越高）
 }
 
+// LinuxDoOAuthConfig 包含 LinuxDo OAuth2 设置。
+type LinuxDoOAuthConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	ClientID     string `yaml:"clientId"`
+	ClientSecret string `yaml:"clientSecret"`
+	RedirectURL  string `yaml:"redirectUrl"`
+}
+
 // AuthConfig 包含身份验证设置。
 type AuthConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	JWTSecret string `yaml:"jwtSecret"`
+	Enabled   bool               `yaml:"enabled"`
+	JWTSecret string             `yaml:"jwtSecret"`
+	LinuxDo   LinuxDoOAuthConfig `yaml:"linuxdo"`
 	// 注意：API Keys 现在在数据库中管理，不再从配置文件读取
 }
 
@@ -209,6 +218,17 @@ func overrideFromEnv(cfg *Config) {
 	// JWT 密钥
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
+	}
+
+	// LinuxDo OAuth 配置覆盖
+	if v := os.Getenv("LINUXDO_CLIENT_ID"); v != "" {
+		cfg.Auth.LinuxDo.ClientID = v
+	}
+	if v := os.Getenv("LINUXDO_CLIENT_SECRET"); v != "" {
+		cfg.Auth.LinuxDo.ClientSecret = v
+	}
+	if v := os.Getenv("LINUXDO_REDIRECT_URL"); v != "" {
+		cfg.Auth.LinuxDo.RedirectURL = v
 	}
 
 	// Redis 覆盖

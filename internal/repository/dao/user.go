@@ -33,7 +33,11 @@ type User struct {
 	PasswordHash string     `gorm:"size:256;not null" json:"-"`
 	Role         UserRole   `gorm:"type:enum('user','admin');default:'user'" json:"role"`
 	Status       UserStatus `gorm:"type:enum('active','pending','disabled');default:'pending';index" json:"status"`
-	CreatedAt    time.Time  `gorm:"autoCreateTime" json:"createdAt"`
+	// OAuth 关联
+	LinuxDoID       int64  `gorm:"uniqueIndex;default:null" json:"linuxdoId"`
+	LinuxDoUsername string `gorm:"size:64;default:null" json:"linuxdoUsername"`
+	AvatarURL       string `gorm:"size:512;default:null" json:"avatarUrl"`
+	CreatedAt       time.Time  `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt    time.Time  `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
@@ -50,6 +54,7 @@ type UserDAO interface {
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByUsername(ctx context.Context, username string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByLinuxDoID(ctx context.Context, linuxDoID int64) (*User, error)
 	List(ctx context.Context) ([]User, error)
 }
 
@@ -96,6 +101,15 @@ func (d *GormUserDAO) GetByUsername(ctx context.Context, username string) (*User
 func (d *GormUserDAO) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
 	err := d.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (d *GormUserDAO) GetByLinuxDoID(ctx context.Context, linuxDoID int64) (*User, error) {
+	var user User
+	err := d.db.WithContext(ctx).Where("linux_do_id = ?", linuxDoID).First(&user).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}

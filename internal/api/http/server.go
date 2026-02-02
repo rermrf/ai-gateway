@@ -32,6 +32,7 @@ func NewServer(
 	authHandler *handler.AuthHandler,
 	userHandler *handler.UserHandler,
 	healthHandler *handler.HealthHandler,
+	oauthHandler *handler.OAuthHandler,
 	authService *auth.AuthService,
 	apiKeyService apikey.Service,
 	limiter ratelimit.Limiter,
@@ -52,7 +53,7 @@ func NewServer(
 	)
 
 	// 注册路由
-	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, healthHandler, authService, apiKeyService, authCfg, l)
+	registerRoutes(engine, openaiHandler, anthropicHandler, adminHandler, authHandler, userHandler, healthHandler, oauthHandler, authService, apiKeyService, authCfg, l)
 
 	return &Server{
 		engine: engine,
@@ -68,6 +69,7 @@ func registerRoutes(
 	authHandler *handler.AuthHandler,
 	userHandler *handler.UserHandler,
 	healthHandler *handler.HealthHandler,
+	oauthHandler *handler.OAuthHandler,
 	authService *auth.AuthService,
 	apiKeyService apikey.Service,
 
@@ -85,6 +87,14 @@ func registerRoutes(
 	{
 		authGroup.POST("/register", authHandler.Register)
 		authGroup.POST("/login", authHandler.Login)
+	}
+
+	// OAuth API（公开）
+	oauthGroup := engine.Group("/api/oauth")
+	{
+		// LinuxDo OAuth
+		oauthGroup.GET("/linuxdo/login", oauthHandler.LinuxDoLogin)
+		oauthGroup.GET("/linuxdo/callback", oauthHandler.LinuxDoCallback)
 	}
 
 	// 用户自助 API（需要 JWT 认证）
