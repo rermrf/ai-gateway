@@ -104,6 +104,30 @@ export function Login() {
                         <Button type="submit" className="w-full" disabled={loading}>
                             {loading ? '登录中...' : '登录'}
                         </Button>
+
+                        <div className="relative my-4">
+                            <div className="absolute inset-0 flex items-center">
+                                <span className="w-full border-t" />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                                <span className="bg-background px-2 text-muted-foreground bg-white dark:bg-gray-800">
+                                    或者
+                                </span>
+                            </div>
+                        </div>
+
+                        <Button
+                            variant="outline"
+                            type="button"
+                            className="w-full"
+                            onClick={() => window.location.href = '/api/oauth/linuxdo/login'}
+                            disabled={loading}
+                        >
+                            <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="linux" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+                                <path fill="currentColor" d="M220.6 65.3c13.9 11.2 38.6 30.2 56.4 57.6 15 23.3 32.2 46.5 28.5 76zM448 320c-26.3 3.6-76.3-24.1-98-33.6-11.2-4.9-19.9-15.1-23.7-27.4-4-12.8 1.4-19 36.1-41.9 17.6-11.6 40-38.6 20.9-63-35.3-45.3-95.2-126-177.3-118-24.4 2.4-78.2 26.5-62.7 132.2 4.1 27.6 8.7 54.3-18.4 69.4l-11.1 5.4c-9.5 4-22 6.8-23.2 22.1-1.2 16.3 15.6 14.1 23.1 33.5s29.6 112 56.1 112c32.7 0 28.3-25.7 34.6-47.5 5.6-19.1 19.1-19.4 19.1-19.4 28.9-8.4 56.5 23 83.3 23 23.4 0 54.8-31 83.3-23 0 0 13.5 .2 19.1 19.4 6.3 21.8 1.9 47.5 34.6 47.5 26.5 0 48.6-92.5 56.1-112s24.3-17.2 23.1-33.5c-1.3-15.3-13.8-18.1-23.2-22.1zM152.4 207c0-21.4 17.5-38.8 39.1-38.8 21.6 0 39.1 17.4 39.1 38.8 0 21.4-17.5 38.8-39.1 38.8-21.6 0-39.1-17.4-39.1-38.8zm220.4 1.3c-21.6 0-39.1-17.4-39.1-38.8 0-21.4 17.5-38.8 39.1-38.8 21.6 0 39.1 17.4 39.1 38.8 0 21.4-17.5 38.8-39.1 38.8z" />
+                            </svg>
+                            使用 Linux Do 登录
+                        </Button>
                     </form>
                 </CardContent>
                 <CardFooter className="flex justify-center">

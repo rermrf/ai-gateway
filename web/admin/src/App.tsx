@@ -11,10 +11,12 @@ import { ApiKeys } from '@/pages/ApiKeys'
 import { Settings } from '@/pages/Settings'
 import { Login } from '@/pages/Login'
 import { Register } from '@/pages/Register'
+import { OAuthCallback } from '@/pages/OAuthCallback'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { Users } from '@/pages/Users'
 import { AuditLogs } from '@/pages/AuditLogs'
 import { UsageLeaderboard } from '@/pages/UsageLeaderboard'
+import { Toaster } from 'sonner'
 
 
 
@@ -54,6 +56,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/oauth/callback" element={<OAuthCallback />} />
 
             <Route path="/" element={
               <RequireAuth>
@@ -144,6 +147,7 @@ function App() {
             } />
           </Routes>
         </BrowserRouter>
+        <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   )
